@@ -20,6 +20,7 @@ class UnifiedConnectionService : ConnectionService() {
             setAudioModeIsVoip(true)
             runtime.connections[id] = this
             setRinging()
+            runtime.showIncomingUi(id)
             android.os.Handler(mainLooper).post {
                 val state = runtime.store.get(id)?.getString("state")
                 if (state == "accepted" || state == "connected") { setActive(); runtime.updateForegroundService() }

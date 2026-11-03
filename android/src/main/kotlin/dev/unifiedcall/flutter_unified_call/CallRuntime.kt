@@ -2,6 +2,9 @@ package dev.unifiedcall.flutter_unified_call
 
 import android.app.*
 import android.content.*
+import android.media.AudioAttributes
+import android.media.Ringtone
+import android.media.RingtoneManager
 import android.net.Uri
 import android.os.*
 import android.telecom.*
@@ -12,6 +15,7 @@ internal class CallRuntime private constructor(val context: Context) {
     val listeners = mutableSetOf<(Map<String, Any?>) -> Unit>()
     val connections = mutableMapOf<String, Connection>()
     val audio = CallAudioBridge(this)
+    private var ringer: Ringtone? = null
     private val handler = Handler(Looper.getMainLooper())
     private var restored = false
     private val alarms = context.getSystemService(AlarmManager::class.java)
@@ -58,7 +62,10 @@ internal class CallRuntime private constructor(val context: Context) {
             notifications.createNotificationChannel(NotificationChannel(incomingChannelId(), "Incoming calls", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "Incoming audio and video calls"
                 setSound(ringtoneUri(ringtoneName()),
-                    android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION_RINGTONE).build())
+                    android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build())
                 enableVibration(true)
             })
             notifications.createNotificationChannel(NotificationChannel("unified_call_ongoing", "Ongoing calls", NotificationManager.IMPORTANCE_LOW))
@@ -112,6 +119,7 @@ internal class CallRuntime private constructor(val context: Context) {
         if (!store.transition(id, action, reason)) return
         timeouts.remove(id)?.let(handler::removeCallbacks)
         alarms.cancel(timeoutIntent(id))
+        ringer?.stop(); ringer = null
         val connection = connections[id]
         when (action) {
             "accepted" -> { connection?.setActive(); show(call) }
@@ -172,7 +180,7 @@ internal class CallRuntime private constructor(val context: Context) {
         val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(context, if (ringing) incomingChannelId() else "unified_call_ongoing") else Notification.Builder(context)
         builder.setSmallIcon(android.R.drawable.sym_call_incoming).setContentTitle(config.getString("callerName"))
             .setContentText(if (ringing) "Incoming ${config.optString("mediaType", "audio")} call" else "Call in progress")
-            .setCategory(Notification.CATEGORY_CALL).setOngoing(true).setOnlyAlertOnce(true)
+            .setCategory(Notification.CATEGORY_CALL).setOngoing(true).setOnlyAlertOnce(!ringing)
             .setContentIntent(open).setVisibility(Notification.VISIBILITY_PRIVATE)
         val decline = action(id, if (ringing) "declined" else "ended")
         val accept = PendingIntent.getActivity(context, 0, launchIntent(id).setAction("accepted"), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -209,6 +217,27 @@ internal class CallRuntime private constructor(val context: Context) {
         else { notifications.notify(id, 1, notification); false }
         if (degraded) store.platformEvent(id, "platformError", mapOf(
             "operation" to "notification", "error" to "call_style_rejected", "fallback" to "generic"))
+        if (ringing) {
+            try {
+                if (ringer == null) {
+                    val r = RingtoneManager.getRingtone(context, ringtoneUri(ringtoneName()))
+                    if (Build.VERSION.SDK_INT >= 28) {
+                        r?.isLooping = true
+                    }
+                    r?.audioAttributes = AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                    r?.play()
+                    ringer = r
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("UnifiedCall", "In-app ringtone playback failed", e)
+            }
+        } else {
+            ringer?.stop()
+            ringer = null
+        }
     }
     companion object {
         @Volatile private var instance: CallRuntime? = null
