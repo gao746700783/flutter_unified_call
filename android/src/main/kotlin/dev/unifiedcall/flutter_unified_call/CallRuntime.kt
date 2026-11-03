@@ -126,8 +126,8 @@ internal class CallRuntime private constructor(val context: Context) {
         ringer?.stop(); ringer = null
         val connection = connections[id]
         when (action) {
-            "accepted" -> { connection?.setActive(); show(call) }
-            "connected" -> { connection?.setActive(); show(call) }
+            "accepted" -> { connection?.setAudioModeIsVoip(true); connection?.setActive(); show(call) }
+            "connected" -> { connection?.setAudioModeIsVoip(true); connection?.setActive(); show(call) }
             else -> {
                 notifications.cancel(id, 1)
                 audio.remove(id)
@@ -233,6 +233,7 @@ internal class CallRuntime private constructor(val context: Context) {
                     r?.audioAttributes = AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .setFlags(AudioAttributes.FLAG_AUDIBILITY_ENFORCED)
                         .build()
                     r?.play()
                     ringer = r

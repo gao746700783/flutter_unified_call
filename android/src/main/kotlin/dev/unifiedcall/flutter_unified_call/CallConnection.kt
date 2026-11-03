@@ -4,7 +4,7 @@ import android.telecom.*
 
 internal open class CallConnection(protected val runtime: CallRuntime, protected val id: String) : Connection() {
     override fun onShowIncomingCallUi() { runtime.showIncomingUi(id) }
-    override fun onAnswer() { runtime.act(id, "accepted") }
+    override fun onAnswer() { setAudioModeIsVoip(true); runtime.act(id, "accepted") }
     override fun onAnswer(videoState: Int) { onAnswer() }
     override fun onReject() { runtime.act(id, "declined", "declined") }
     override fun onDisconnect() { runtime.act(id, "ended", "localEnded") }

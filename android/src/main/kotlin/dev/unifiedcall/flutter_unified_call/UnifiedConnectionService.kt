@@ -20,13 +20,16 @@ class UnifiedConnectionService : ConnectionService() {
                 connectionCapabilities = Connection.CAPABILITY_HOLD or Connection.CAPABILITY_SUPPORT_HOLD
             }
             setCallerDisplayName(call.getJSONObject("config").getString("callerName"), TelecomManager.PRESENTATION_ALLOWED)
-            setAudioModeIsVoip(true)
             runtime.connections[id] = this
             setRinging()
             runtime.showIncomingUi(id)
             android.os.Handler(mainLooper).post {
                 val state = runtime.store.get(id)?.getString("state")
-                if (state == "accepted" || state == "connected") { setActive(); runtime.updateForegroundService() }
+                if (state == "accepted" || state == "connected") {
+                    setAudioModeIsVoip(true)
+                    setActive()
+                    runtime.updateForegroundService()
+                }
                 else if (state == "ended") {
                     runtime.connections.remove(id)
                     setDisconnected(DisconnectCause(DisconnectCause.CANCELED)); destroy()
