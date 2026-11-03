@@ -23,7 +23,32 @@ internal class CallRuntime private constructor(val context: Context) {
     private val timeouts = mutableMapOf<String, Runnable>()
     val notifications = context.getSystemService(NotificationManager::class.java)
     val account = PhoneAccountHandle(ComponentName(context, UnifiedConnectionService::class.java), "unified_call")
-    init { store.onEvent = { event -> listeners.toList().forEach { it(event) } } }
+    var isAppForeground = false
+        private set
+    private var foregroundActivityCount = 0
+    init {
+        store.onEvent = { event -> listeners.toList().forEach { it(event) } }
+        val app = context.applicationContext as? Application
+        app?.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
+            override fun onActivityStarted(activity: Activity) {
+                if (activity !is IncomingCallActivity) {
+                    foregroundActivityCount++
+                    isAppForeground = foregroundActivityCount > 0
+                }
+            }
+            override fun onActivityStopped(activity: Activity) {
+                if (activity !is IncomingCallActivity) {
+                    foregroundActivityCount = (foregroundActivityCount - 1).coerceAtLeast(0)
+                    isAppForeground = foregroundActivityCount > 0
+                }
+            }
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
+            override fun onActivityResumed(activity: Activity) {}
+            override fun onActivityPaused(activity: Activity) {}
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+            override fun onActivityDestroyed(activity: Activity) {}
+        })
+    }
     private fun ringtoneUri(name: String?): Uri {
         if (name == null) {
             return RingtoneManager.getActualDefaultRingtoneUri(context, RingtoneManager.TYPE_RINGTONE)
@@ -191,7 +216,7 @@ internal class CallRuntime private constructor(val context: Context) {
             .setCategory(Notification.CATEGORY_CALL).setOngoing(true).setOnlyAlertOnce(!ringing)
             .setContentIntent(open).setVisibility(if (ringing) Notification.VISIBILITY_PUBLIC else Notification.VISIBILITY_PRIVATE)
         val decline = action(id, if (ringing) "declined" else "ended")
-        val accept = PendingIntent.getActivity(context, 0, launchIntent(id).setAction("accepted"), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val accept = action(id, "accepted")
         val useCallStyle = Build.VERSION.SDK_INT >= 31 && ringing &&
             (Build.VERSION.SDK_INT < 34 || notifications.canUseFullScreenIntent())
         if (useCallStyle) {
@@ -277,7 +302,19 @@ class CallActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val id = intent.getStringExtra("callId") ?: return
         val action = intent.action ?: return
-        CallRuntime.get(context).act(id, action, if (action == "declined") "declined" else "localEnded")
+        val runtime = CallRuntime.get(context)
+        runtime.act(id, action, if (action == "declined") "declined" else "localEnded")
+        if (action == "accepted" && !runtime.isAppForeground) {
+            context.packageManager.getLaunchIntentForPackage(context.packageName)?.let {
+                it.putExtra("unifiedCallId", id)
+                it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                try {
+                    context.startActivity(it)
+                } catch (e: Exception) {
+                    android.util.Log.w("UnifiedCall", "Failed to launch main activity on accept", e)
+                }
+            }
+        }
     }
 }
 

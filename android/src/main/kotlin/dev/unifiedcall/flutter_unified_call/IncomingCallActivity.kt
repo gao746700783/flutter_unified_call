@@ -23,7 +23,10 @@ class IncomingCallActivity : Activity() {
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); handle(intent) }
     private fun handle(intent: Intent) {
         callId = intent.getStringExtra("callId")
-        if (intent.action == "accepted") callId?.let { accept(it) }
+        if (intent.action == "accepted") {
+            callId?.let { accept(it) }
+            return
+        }
         render()
     }
     private fun accept(id: String) {
