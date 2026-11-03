@@ -91,10 +91,17 @@ final class CallStore {
         onEvent?(event)
     }
     private func commit(calls: [String: [String: Any]], events: [[String: Any]], options: [String: Any]) throws {
-        let root: [String: Any] = ["calls": calls, "events": events, "options": options]
+        var prunedCalls = calls
+        let endedKeys = prunedCalls.filter { $0.value["state"] as? String == "ended" }.map { $0.key }
+        if endedKeys.count > 50 {
+            for key in endedKeys.prefix(endedKeys.count - 50) {
+                prunedCalls.removeValue(forKey: key)
+            }
+        }
+        let root: [String: Any] = ["calls": prunedCalls, "events": events, "options": options]
         let data = try JSONSerialization.data(withJSONObject: root)
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: url, options: .atomic)
-        self.calls = calls; self.events = events; self.options = options
+        self.calls = prunedCalls; self.events = events; self.options = options
     }
 }

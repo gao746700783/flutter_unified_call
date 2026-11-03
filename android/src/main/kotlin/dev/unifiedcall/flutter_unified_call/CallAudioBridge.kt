@@ -40,9 +40,9 @@ internal class CallAudioBridge(private val runtime: CallRuntime) {
     fun remove(id: String) { muted.remove(id); legacy.remove(id); modern?.available?.remove(id) }
     fun get(id: String): List<Map<String, Any>> {
         if (Build.VERSION.SDK_INT < 26) throw UnsupportedOperationException("Audio endpoints require Android 8 or newer")
-        check(runtime.connections.containsKey(id)) { "No live Telecom connection" }
+        val connection = runtime.connections[id] ?: throw IllegalStateException("No live Telecom connection")
         if (Build.VERSION.SDK_INT >= 34) return endpoints().available[id].orEmpty().map(::endpointMap)
-        val state = legacy[id] ?: return emptyList()
+        val state = legacy[id] ?: connection.callAudioState ?: return emptyList()
         return listOf(CallAudioState.ROUTE_EARPIECE, CallAudioState.ROUTE_SPEAKER,
             CallAudioState.ROUTE_BLUETOOTH, CallAudioState.ROUTE_WIRED_HEADSET)
             .filter { state.supportedRouteMask and it != 0 }

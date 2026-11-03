@@ -77,7 +77,16 @@ internal class CallStore(context: Context, private val writeOverride: ((String) 
             .put("metadata", JSONObject(metadata))
         events.put(event); save(); onEvent?.invoke(event.toMap())
     }
+    private fun pruneEndedCalls() {
+        val endedKeys = calls.keys().asSequence().filter { calls.getJSONObject(it).optString("state") == "ended" }.toList()
+        if (endedKeys.size > 50) {
+            for (key in endedKeys.take(endedKeys.size - 50)) {
+                calls.remove(key)
+            }
+        }
+    }
     private fun save() {
+        pruneEndedCalls()
         val candidate = data.toString()
         try {
             val override = writeOverride

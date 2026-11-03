@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import AudioToolbox
 
 protocol RingtonePlayback: AnyObject {
     var numberOfLoops: Int { get set }
@@ -12,6 +13,7 @@ extension AVAudioPlayer: RingtonePlayback {}
 final class ForegroundRinger {
     private let makePlayer: (String?) throws -> RingtonePlayback
     private var player: RingtonePlayback?
+    private var vibrationTimer: Timer?
     private struct Request: Equatable { let callId: String; let resource: String? }
     private var key: Request?
     private var failedKey: Request?
@@ -32,10 +34,17 @@ final class ForegroundRinger {
                               userInfo: [NSLocalizedDescriptionKey: "Foreground ringtone playback failed"])
             }
             player = audio; key = next
+            AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+            vibrationTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
+                AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+            }
         } catch { failedKey = next; throw error }
     }
     func reset() { stop(); failedKey = nil }
-    func stop() { player?.stop(); player = nil; key = nil }
+    func stop() {
+        player?.stop(); player = nil; key = nil
+        vibrationTimer?.invalidate(); vibrationTimer = nil
+    }
     deinit { player?.stop() }
     private static func makePlayer(_ resource: String?) throws -> RingtonePlayback {
         if let resource = resource {

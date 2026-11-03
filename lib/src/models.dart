@@ -42,7 +42,7 @@ class IncomingCallConfig {
     callerHandle: map['callerHandle'] as String?,
     mediaType: CallMediaType.values.byName(map['mediaType'] as String),
     expiresAt: DateTime.fromMillisecondsSinceEpoch(map['expiresAt'] as int, isUtc: true),
-    extra: Map<String, Object?>.from(map['extra'] as Map),
+    extra: map['extra'] == null ? const {} : Map<String, Object?>.from(map['extra'] as Map),
   );
 }
 

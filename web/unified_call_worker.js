@@ -64,7 +64,9 @@ self.addEventListener('notificationclick', event => {
     if (target.origin !== self.location.origin) throw new Error('Launch URL must use the application origin');
     const windows = await self.clients.matchAll({type: 'window', includeUncontrolled: true});
     const existing = windows.find(client => client.url.startsWith(self.registration.scope));
-    if (existing) await existing.focus();
-    else await self.clients.openWindow(target.href);
+    if (existing) {
+      await existing.focus();
+      existing.postMessage({type: 'unified-call-action', callId: id, action: event.action});
+    } else await self.clients.openWindow(target.href);
   })());
 });

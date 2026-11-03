@@ -2,7 +2,7 @@ import Flutter
 import UIKit
 import UserNotifications
 
-public class FlutterUnifiedCallPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
+public class FlutterUnifiedCallPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, UNUserNotificationCenterDelegate {
     private var sink: FlutterEventSink?
     private let listenerId = UUID()
     private var runtime: CallRuntime { get throws { try CallRuntime.shared.get() } }
@@ -33,6 +33,9 @@ public class FlutterUnifiedCallPlugin: NSObject, FlutterPlugin, FlutterStreamHan
         registrar.addMethodCallDelegate(instance, channel: FlutterMethodChannel(name: "flutter_unified_call", binaryMessenger: registrar.messenger()))
         FlutterEventChannel(name: "flutter_unified_call/events", binaryMessenger: registrar.messenger()).setStreamHandler(instance)
         registrar.addApplicationDelegate(instance)
+        if UNUserNotificationCenter.current().delegate == nil {
+            UNUserNotificationCenter.current().delegate = instance
+        }
     }
     public func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
         do {

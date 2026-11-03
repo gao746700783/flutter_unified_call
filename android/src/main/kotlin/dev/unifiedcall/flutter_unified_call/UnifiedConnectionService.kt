@@ -34,6 +34,10 @@ class UnifiedConnectionService : ConnectionService() {
         val id = request.extras?.getString("callId") ?: return
         val runtime = CallRuntime.get(this)
         runtime.store.platformEvent(id, "platformError", mapOf("operation" to "telecom", "error" to "telecom_rejected"))
-        runtime.act(id, "ended", "failed")
+        if (runtime.store.options().optBoolean("telecomFallback", false)) {
+            runtime.showIncomingUi(id)
+        } else {
+            runtime.act(id, "ended", "failed")
+        }
     }
 }
