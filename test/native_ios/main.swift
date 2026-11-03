@@ -72,4 +72,18 @@ do {
 try FileManager.default.removeItem(at: mergeURL)
 try merging.transition("test", action: "ended", now: now)
 check(!(try merging.incoming(duplicate, now: now)), "Terminal duplicate revived")
+let retainedURL = directory.appendingPathComponent("retained.json")
+let retained = try CallStore(url: retainedURL)
+for index in 0...50 {
+    var item = config
+    item["callId"] = "terminal-\(index)"
+    item["expiresAt"] = now + 60000
+    check(try retained.incoming(item, now: now), "Retention setup failed")
+    check(try retained.transition("terminal-\(index)", action: "declined", reason: "declined", now: now),
+          "Retention transition failed")
+}
+var replay = config
+replay["callId"] = "terminal-0"
+replay["expiresAt"] = now + 60000
+check(!(try CallStore(url: retainedURL).incoming(replay, now: now)), "Terminal call revived after 51 endings")
 print("PASS: extra merge, historical snapshots, lifecycle, expiry, durable replay/ack and persistence rollback")

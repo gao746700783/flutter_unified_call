@@ -100,9 +100,8 @@
             case 'acknowledgeEvent': root.events = root.events.filter(event => event.eventId !== args.eventId); break;
             default: throw new Error(`Unsupported operation: ${method}`);
           }
-          const endedKeys = Object.keys(root.calls).filter(id => root.calls[id].state === 'ended');
-          if (endedKeys.length > 50) {
-            endedKeys.slice(0, endedKeys.length - 50).forEach(id => delete root.calls[id]);
+          for (const [id, call] of Object.entries(root.calls)) {
+            if (call.state === 'ended' && call.config.expiresAt <= now) delete root.calls[id];
           }
           table.put(root, 'root');
         } catch (error) { failure = error; tx.abort(); }

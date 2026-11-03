@@ -152,7 +152,9 @@ internal class CallRuntime private constructor(val context: Context) {
         if (!store.transition(id, action, reason)) return
         timeouts.remove(id)?.let(handler::removeCallbacks)
         alarms.cancel(timeoutIntent(id))
-        ringer?.stop(); ringer = null
+        if (store.all().none { it.optString("state") == "ringing" }) {
+            ringer?.stop(); ringer = null
+        }
         val connection = connections[id]
         when (action) {
             "accepted" -> { connection?.setAudioModeIsVoip(true); connection?.setActive(); show(call) }
@@ -198,10 +200,19 @@ internal class CallRuntime private constructor(val context: Context) {
         // Inexact by design: no exact-alarm special access is requested.
         alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, config.getLong("expiresAt"), timeoutIntent(id))
     }
-    private fun action(id: String, name: String): PendingIntent = PendingIntent.getBroadcast(context, 0,
-        Intent(context, CallActionReceiver::class.java).setAction(name)
-            .setData(Uri.parse("unified-call://action/${Uri.encode(id)}/$name")).putExtra("callId", id),
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    private fun action(id: String, name: String): PendingIntent {
+        if (name == "accepted") {
+            val intent = Intent(context, IncomingCallActivity::class.java).setAction(name)
+                .setData(Uri.parse("unified-call://action/${Uri.encode(id)}/$name")).putExtra("callId", id)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            return PendingIntent.getActivity(context, 0, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        }
+        return PendingIntent.getBroadcast(context, 0,
+            Intent(context, CallActionReceiver::class.java).setAction(name)
+                .setData(Uri.parse("unified-call://action/${Uri.encode(id)}/$name")).putExtra("callId", id),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    }
     fun launchIntent(id: String): Intent = Intent(context, IncomingCallActivity::class.java)
         .setData(Uri.parse("unified-call://incoming/${Uri.encode(id)}")).putExtra("callId", id)
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -254,17 +265,6 @@ internal class CallRuntime private constructor(val context: Context) {
             "operation" to "notification", "error" to "call_style_rejected", "fallback" to "generic"))
         if (ringing) {
             try {
-                val am = context.getSystemService(AudioManager::class.java)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    am?.clearCommunicationDevice()
-                }
-                if (am?.mode == AudioManager.MODE_IN_COMMUNICATION) {
-                    am.mode = AudioManager.MODE_NORMAL
-                }
-            } catch (e: Exception) {
-                android.util.Log.w("UnifiedCall", "prepareForRinging audio setup failed", e)
-            }
-            try {
                 if (ringer == null) {
                     val r = RingtoneManager.getRingtone(context, ringtoneUri(ringtoneName()))
                     if (Build.VERSION.SDK_INT >= 28) {
@@ -281,7 +281,7 @@ internal class CallRuntime private constructor(val context: Context) {
             } catch (e: Exception) {
                 android.util.Log.w("UnifiedCall", "In-app ringtone playback failed", e)
             }
-        } else {
+        } else if (store.all().none { it.optString("state") == "ringing" }) {
             ringer?.stop()
             ringer = null
         }
@@ -304,17 +304,6 @@ class CallActionReceiver : BroadcastReceiver() {
         val action = intent.action ?: return
         val runtime = CallRuntime.get(context)
         runtime.act(id, action, if (action == "declined") "declined" else "localEnded")
-        if (action == "accepted" && !runtime.isAppForeground) {
-            context.packageManager.getLaunchIntentForPackage(context.packageName)?.let {
-                it.putExtra("unifiedCallId", id)
-                it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                try {
-                    context.startActivity(it)
-                } catch (e: Exception) {
-                    android.util.Log.w("UnifiedCall", "Failed to launch main activity on accept", e)
-                }
-            }
-        }
     }
 }
 

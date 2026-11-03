@@ -80,6 +80,15 @@ const assert = require('node:assert/strict');
     const viaPage = await a.evaluate(() => UnifiedCallPage.invoke('getActiveCalls', {}));
     assert.ok(Array.isArray(viaPage.value));
     await assert.rejects(a.evaluate(() => UnifiedCallPage.invoke('initialize', {webLaunchUrl: 'https://example.org/'})), /origin/);
+    const expiry = Date.now() + 60000;
+    for (let index = 0; index <= 50; index++) {
+      const id = `terminal-${index}`;
+      await run(a, 'showIncomingCall', {...call, callId: id, expiresAt: expiry});
+      await run(a, 'declineCall', {callId: id});
+    }
+    const replay = await run(a, 'showIncomingCall', {...call, callId: 'terminal-0', expiresAt: expiry});
+    assert.equal(replay.events.length, 0);
+    assert.equal((await run(a, 'getActiveCalls')).value.some(c => c.config.callId === 'terminal-0'), false);
     console.log('PASS: browser IndexedDB concurrency, lifecycle, replay/ack, expiry, arbitrary IDs, Worker RPC/shared state');
   } finally { if (browser) await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

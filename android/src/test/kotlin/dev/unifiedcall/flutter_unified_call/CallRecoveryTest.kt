@@ -72,7 +72,7 @@ class CallRecoveryTest {
         file.writeText(root.toString())
         CallTimeoutReceiver().onReceive(context, Intent().putExtra("callId", "expired"))
         val runtime = CallRuntime.get(context)
-        assertEquals("ended", runtime.store.get("expired")!!.getString("state"))
+        assertNull(runtime.store.get("expired"))
         assertEquals("missed", (runtime.store.pending().last() as Map<*, *>)["type"])
     }
 }

@@ -54,4 +54,15 @@ class FlutterUnifiedCallPluginTest {
         assertTrue(store.transition("call-1", "connected"))
         assertFalse(store.transition("call-1", "connected"))
     }
+    @Test fun moreThanFiftyEndedCallsRemainDeduplicated() {
+        val expiry = System.currentTimeMillis() + 60000
+        for (index in 0..50) {
+            val payload = config(expiry).put("callId", "call-$index")
+            assertTrue(store.incoming(payload))
+            assertTrue(store.transition("call-$index", "declined", "declined"))
+        }
+        val recovered = CallStore(context)
+        assertFalse(recovered.incoming(config(expiry).put("callId", "call-0")))
+        assertEquals("ended", recovered.get("call-0")!!.getString("state"))
+    }
 }

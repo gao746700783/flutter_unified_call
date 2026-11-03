@@ -32,8 +32,10 @@ class IncomingCallActivity : Activity() {
     private fun accept(id: String) {
         runtime.act(id, "accepted")
         if (runtime.store.get(id)?.getString("state") != "accepted") return
-        packageManager.getLaunchIntentForPackage(packageName)?.let {
-            startActivity(it.putExtra("unifiedCallId", id).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+        if (!runtime.isAppForeground) {
+            packageManager.getLaunchIntentForPackage(packageName)?.let {
+                startActivity(it.putExtra("unifiedCallId", id).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+            }
         }
         finish()
     }

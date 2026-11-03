@@ -40,9 +40,22 @@ class CallRingtoneTest {
         val incoming = runtime.notifications.activeNotifications.single().notification
         assertEquals("unified_call_incoming_v2", incoming.channelId)
         assertTrue(incoming.flags and Notification.FLAG_INSISTENT != 0)
+        assertTrue(incoming.actions.last().actionIntent.isActivity)
         runtime.act("ring", "accepted")
         val accepted = runtime.notifications.activeNotifications.single().notification
         assertEquals("unified_call_ongoing", accepted.channelId)
         assertEquals(0, accepted.flags and Notification.FLAG_INSISTENT)
+    }
+    @Test fun endingOneCallKeepsOtherCallRinging() {
+        val expiresAt = System.currentTimeMillis() + 30000
+        for (id in listOf("first", "second")) {
+            runtime.incoming(mapOf("callId" to id, "callerName" to id, "mediaType" to "audio",
+                "expiresAt" to expiresAt, "extra" to emptyMap<String, Any>()))
+        }
+        runtime.act("first", "declined", "declined")
+        assertEquals("ringing", runtime.store.get("second")!!.getString("state"))
+        assertTrue(runtime.notifications.activeNotifications.any {
+            it.tag == "second" && it.notification.flags and Notification.FLAG_INSISTENT != 0
+        })
     }
 }

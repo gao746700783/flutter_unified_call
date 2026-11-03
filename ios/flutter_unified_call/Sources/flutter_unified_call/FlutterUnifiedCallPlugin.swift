@@ -106,7 +106,10 @@ public class FlutterUnifiedCallPlugin: NSObject, FlutterPlugin, FlutterStreamHan
     private func failure(_ error: Error) -> FlutterError { FlutterError(code: "call_error", message: error.localizedDescription, details: nil) }
     public func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
                                        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        guard notification.request.content.userInfo[CallRuntime.payloadKey] != nil else { return }
+        guard notification.request.content.userInfo[CallRuntime.payloadKey] != nil else {
+            completionHandler([.alert, .sound, .badge])
+            return
+        }
         DispatchQueue.main.async {
             do {
                 if let config = try CallRuntime.payload(notification.request.content.userInfo) { try self.runtime.ingest(config) }
@@ -116,11 +119,12 @@ public class FlutterUnifiedCallPlugin: NSObject, FlutterPlugin, FlutterStreamHan
     }
     public func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                        withCompletionHandler completionHandler: @escaping () -> Void) {
-        Self.handleNotificationAction(identifier: response.actionIdentifier,
+        let handled = Self.handleNotificationAction(identifier: response.actionIdentifier,
             userInfo: response.notification.request.content.userInfo) { error in
             if let error = error { NSLog("flutter_unified_call: notification action failed: %@", String(describing: error)) }
             completionHandler()
         }
+        if !handled { completionHandler() }
     }
     public func applicationDidBecomeActive(_ application: UIApplication) {
         do { try runtime.reconcile() }
