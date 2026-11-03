@@ -9,6 +9,10 @@ internal open class CallConnection(protected val runtime: CallRuntime, protected
     override fun onReject() { runtime.act(id, "declined", "declined") }
     override fun onDisconnect() { runtime.act(id, "ended", "localEnded") }
     override fun onAbort() { runtime.act(id, "ended", "failed") }
+    override fun onSilence() {
+        super.onSilence()
+        runtime.silenceRinger()
+    }
     @Suppress("DEPRECATION")
     override fun onCallAudioStateChanged(state: CallAudioState) { runtime.audio.legacyChanged(id, state) }
 }

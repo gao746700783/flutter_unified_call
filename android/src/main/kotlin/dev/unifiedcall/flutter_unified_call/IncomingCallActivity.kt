@@ -12,6 +12,7 @@ class IncomingCallActivity : Activity() {
     private val update: (Map<String, Any?>) -> Unit = { render() }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if (Build.VERSION.SDK_INT >= 27) { setShowWhenLocked(true); setTurnScreenOn(true) }
         else {
             @Suppress("DEPRECATION")

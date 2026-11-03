@@ -25,7 +25,10 @@ internal class CallRuntime private constructor(val context: Context) {
     val account = PhoneAccountHandle(ComponentName(context, UnifiedConnectionService::class.java), "unified_call")
     init { store.onEvent = { event -> listeners.toList().forEach { it(event) } } }
     private fun ringtoneUri(name: String?): Uri {
-        if (name == null) return android.provider.Settings.System.DEFAULT_RINGTONE_URI
+        if (name == null) {
+            return RingtoneManager.getActualDefaultRingtoneUri(context, RingtoneManager.TYPE_RINGTONE)
+                ?: android.provider.Settings.System.DEFAULT_RINGTONE_URI
+        }
         require(name.matches(Regex("[a-z][a-z0-9_]*"))) { "Ringtone must be a res/raw resource name" }
         require(context.resources.getIdentifier(name, "raw", context.packageName) != 0) { "Ringtone resource not found" }
         return Uri.parse("android.resource://${context.packageName}/raw/$name")
@@ -62,11 +65,7 @@ internal class CallRuntime private constructor(val context: Context) {
         if (Build.VERSION.SDK_INT >= 26) {
             notifications.createNotificationChannel(NotificationChannel(incomingChannelId(), "Incoming calls", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "Incoming audio and video calls"
-                setSound(ringtoneUri(ringtoneName()),
-                    android.media.AudioAttributes.Builder()
-                        .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
-                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build())
+                setSound(null, null)
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 400, 300, 400)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
@@ -245,8 +244,9 @@ internal class CallRuntime private constructor(val context: Context) {
                         r?.isLooping = true
                     }
                     r?.audioAttributes = AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                        .setLegacyStreamType(AudioManager.STREAM_RING)
                         .setFlags(AudioAttributes.FLAG_AUDIBILITY_ENFORCED)
                         .build()
                     r?.play()
@@ -259,6 +259,10 @@ internal class CallRuntime private constructor(val context: Context) {
             ringer?.stop()
             ringer = null
         }
+    }
+    fun silenceRinger() {
+        ringer?.stop()
+        ringer = null
     }
     companion object {
         @Volatile private var instance: CallRuntime? = null
