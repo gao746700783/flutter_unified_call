@@ -32,13 +32,13 @@ class CallRingtoneTest {
         runtime.store.configure(mapOf("androidRingtoneName" to "removed_by_upgrade"))
         runtime.initialize()
         assertTrue(runtime.store.options().isNull("androidRingtoneName"))
-        assertNotNull(runtime.notifications.getNotificationChannel("unified_call_incoming"))
+        assertNotNull(runtime.notifications.getNotificationChannel("unified_call_incoming_v2"))
     }
     @Test fun ringingRepeatsSoundAndAcceptanceRemovesRepeatFlag() {
         runtime.incoming(mapOf("callId" to "ring", "callerName" to "Alice", "mediaType" to "audio",
             "expiresAt" to System.currentTimeMillis() + 30000, "extra" to emptyMap<String, Any>()))
         val incoming = runtime.notifications.activeNotifications.single().notification
-        assertEquals("unified_call_incoming", incoming.channelId)
+        assertEquals("unified_call_incoming_v2", incoming.channelId)
         assertTrue(incoming.flags and Notification.FLAG_INSISTENT != 0)
         runtime.act("ring", "accepted")
         val accepted = runtime.notifications.activeNotifications.single().notification

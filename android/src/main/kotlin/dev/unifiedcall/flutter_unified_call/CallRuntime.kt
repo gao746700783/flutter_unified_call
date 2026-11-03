@@ -38,7 +38,7 @@ internal class CallRuntime private constructor(val context: Context) {
         return if (options.isNull("androidRingtoneName")) null else options.getString("androidRingtoneName")
     }
     private fun incomingChannelId(): String = ringtoneName()
-        ?.let { "unified_call_incoming_$it" } ?: "unified_call_incoming"
+        ?.let { "unified_call_incoming_${it}_v2" } ?: "unified_call_incoming_v2"
     fun configure(args: Map<*, *>) {
         val name = args["androidRingtoneName"]
         require(name == null || name is String) { "Ringtone name must be a string" }
@@ -63,6 +63,10 @@ internal class CallRuntime private constructor(val context: Context) {
             }
         }
         if (Build.VERSION.SDK_INT >= 26) {
+            try {
+                notifications.deleteNotificationChannel("unified_call_incoming")
+                ringtoneName()?.let { notifications.deleteNotificationChannel("unified_call_incoming_$it") }
+            } catch (_: Exception) {}
             notifications.createNotificationChannel(NotificationChannel(incomingChannelId(), "Incoming calls", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "Incoming audio and video calls"
                 setSound(null, null)
@@ -229,8 +233,6 @@ internal class CallRuntime private constructor(val context: Context) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     am?.clearCommunicationDevice()
                 }
-                @Suppress("DEPRECATION")
-                am?.isSpeakerphoneOn = true
                 if (am?.mode == AudioManager.MODE_IN_COMMUNICATION) {
                     am.mode = AudioManager.MODE_NORMAL
                 }
@@ -247,7 +249,6 @@ internal class CallRuntime private constructor(val context: Context) {
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
                         .setLegacyStreamType(AudioManager.STREAM_RING)
-                        .setFlags(AudioAttributes.FLAG_AUDIBILITY_ENFORCED)
                         .build()
                     r?.play()
                     ringer = r
