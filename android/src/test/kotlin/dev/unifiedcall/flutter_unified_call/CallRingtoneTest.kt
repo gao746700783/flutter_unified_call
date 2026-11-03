@@ -58,4 +58,19 @@ class CallRingtoneTest {
             it.tag == "second" && it.notification.flags and Notification.FLAG_INSISTENT != 0
         })
     }
+    @Test fun foregroundBannerModeSuppressesNativeNotificationUntilBackground() {
+        runtime.configure(mapOf("enableTelecom" to false, "androidForegroundBanner" to true))
+        CallRuntime::class.java.getDeclaredField("isAppForeground").apply {
+            isAccessible = true
+        }.setBoolean(runtime, true)
+        runtime.incoming(mapOf("callId" to "foreground", "callerName" to "Alice",
+            "mediaType" to "audio", "expiresAt" to System.currentTimeMillis() + 30000,
+            "extra" to emptyMap<String, Any>()))
+        assertTrue(runtime.notifications.activeNotifications.isEmpty())
+        CallRuntime::class.java.getDeclaredField("isAppForeground").apply {
+            isAccessible = true
+        }.setBoolean(runtime, false)
+        runtime.showIncomingUi("foreground")
+        assertTrue(runtime.notifications.activeNotifications.any { it.tag == "foreground" })
+    }
 }

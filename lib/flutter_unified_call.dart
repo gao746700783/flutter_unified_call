@@ -14,13 +14,15 @@ class FlutterUnifiedCall {
   Future<void> initialize({String acceptText = 'Accept', String declineText = 'Decline',
       bool enableTelecom = true, bool iosTimeSensitive = false, bool iosEnableRingtone = true,
       String? iosRingtoneFileName, String? androidRingtoneName, bool webUseServiceWorker = false,
-      String? webLaunchUrl, String? webRingtoneUrl, bool webEnableRingtone = true}) async {
+      String? webLaunchUrl, String? webRingtoneUrl, bool webEnableRingtone = true,
+      bool androidForegroundBanner = false}) async {
     await _platform.invoke('initialize', {
       'acceptText': acceptText, 'declineText': declineText, 'enableTelecom': enableTelecom,
       'iosTimeSensitive': iosTimeSensitive, 'iosEnableRingtone': iosEnableRingtone,
       'iosRingtoneFileName': iosRingtoneFileName, 'androidRingtoneName': androidRingtoneName,
       'webRingtoneUrl': webRingtoneUrl, 'webEnableRingtone': webEnableRingtone,
       'webUseServiceWorker': webUseServiceWorker, 'webLaunchUrl': webLaunchUrl,
+      'androidForegroundBanner': androidForegroundBanner,
     });
   }
   /// Call from a Web user gesture after initialize; unsupported on native platforms.

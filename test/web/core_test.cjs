@@ -89,6 +89,26 @@ const assert = require('node:assert/strict');
     const replay = await run(a, 'showIncomingCall', {...call, callId: 'terminal-0', expiresAt: expiry});
     assert.equal(replay.events.length, 0);
     assert.equal((await run(a, 'getActiveCalls')).value.some(c => c.config.callId === 'terminal-0'), false);
+    await a.evaluate(() => UnifiedCallPage.invoke('initialize', {webUseServiceWorker: false, webEnableRingtone: false}));
+    await a.evaluate(() => {
+      window.__callNotices = [];
+      Object.defineProperty(document, 'visibilityState', {configurable: true, get: () => 'hidden'});
+      window.Notification = class {
+        static permission = 'granted';
+        constructor(title, options) {
+          this.title = title;
+          this.options = options;
+          this.closed = false;
+          window.__callNotices.push(this);
+        }
+        close() { this.closed = true; }
+      };
+    });
+    await a.evaluate(call => UnifiedCallPage.invoke('showIncomingCall',
+      {...call, callId: 'hidden-page', expiresAt: Date.now() + 30000}), call);
+    assert.equal(await a.evaluate(() => window.__callNotices.at(-1).title), 'Alice');
+    await a.evaluate(() => UnifiedCallPage.invoke('declineCall', {callId: 'hidden-page'}));
+    assert.equal(await a.evaluate(() => window.__callNotices.at(-1).closed), true);
     console.log('PASS: browser IndexedDB concurrency, lifecycle, replay/ack, expiry, arbitrary IDs, Worker RPC/shared state');
   } finally { if (browser) await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

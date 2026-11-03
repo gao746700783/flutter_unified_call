@@ -34,12 +34,14 @@ internal class CallRuntime private constructor(val context: Context) {
                 if (activity !is IncomingCallActivity) {
                     foregroundActivityCount++
                     isAppForeground = foregroundActivityCount > 0
+                    refreshForegroundIncomingUi()
                 }
             }
             override fun onActivityStopped(activity: Activity) {
                 if (activity !is IncomingCallActivity) {
                     foregroundActivityCount = (foregroundActivityCount - 1).coerceAtLeast(0)
                     isAppForeground = foregroundActivityCount > 0
+                    refreshForegroundIncomingUi()
                 }
             }
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
@@ -70,6 +72,16 @@ internal class CallRuntime private constructor(val context: Context) {
         ringtoneUri(name as? String) // Validate before persisting any new options.
         store.configure(args)
         initialize()
+        refreshForegroundIncomingUi()
+    }
+    private fun refreshForegroundIncomingUi() {
+        if (!store.options().optBoolean("androidForegroundBanner", false)) return
+        for (call in store.all()) {
+            if (call.optString("state") == "ringing") {
+                val id = call.getJSONObject("config").getString("callId")
+                if (isAppForeground) notifications.cancel(id, 1) else show(call)
+            }
+        }
     }
     fun initialize() {
         // A host upgrade may remove a previously configured bundled resource.
@@ -252,7 +264,12 @@ internal class CallRuntime private constructor(val context: Context) {
         }
         val notification = builder.build()
         if (ringing) notification.flags = notification.flags or Notification.FLAG_INSISTENT
-        val degraded = if (useCallStyle) postCallStyleWithFallback(notification, {
+        val suppressed = ringing && isAppForeground &&
+            store.options().optBoolean("androidForegroundBanner", false)
+        val degraded = if (suppressed) {
+            notifications.cancel(id, 1)
+            false
+        } else if (useCallStyle) postCallStyleWithFallback(notification, {
             builder.setStyle(null)
             builder.setFullScreenIntent(null, false)
             val declineAction = Notification.Action.Builder(null, store.options().optString("declineText", "Decline"), decline).build()

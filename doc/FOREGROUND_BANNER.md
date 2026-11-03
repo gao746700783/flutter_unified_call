@@ -5,6 +5,12 @@ default; `enabled: true` also enables it on Android for applications that choose
 an in-app UI. Place it inside `MaterialApp.builder` or around a page inside the
 MaterialApp. Initialize the controller before receiving calls.
 
+For Android foreground Banner mode, initialize with
+`androidForegroundBanner: true` and mount `CallBannerHost(enabled: true)`.
+The ringtone and Telecom state remain active; the native incoming notification
+is suppressed while the app is foreground and restored when it moves to the
+background. The default remains native Android UI.
+
 ```dart
 MaterialApp(
   builder: (context, child) => CallBannerHost(

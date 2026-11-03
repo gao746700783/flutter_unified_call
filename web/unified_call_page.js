@@ -14,6 +14,39 @@
   let failedId;
   let unlocked = false;
   let pageFocused = document.hasFocus();
+  const notifications = new Map();
+  const notificationFailures = new Set();
+  async function syncNotifications() {
+    const hidden = document.visibilityState !== 'visible';
+    const enabled = !useWorker && hidden && typeof Notification === 'function' &&
+      Notification.permission === 'granted';
+    const calls = enabled ? (await UnifiedCallCore.invoke('getActiveCalls')).value : [];
+    const ringing = new Map(calls.filter(call => call.state === 'ringing' &&
+      call.config.expiresAt > Date.now()).map(call => [call.config.callId, call.config]));
+    for (const [id, notification] of notifications) {
+      if (!ringing.has(id)) { notification.close(); notifications.delete(id); }
+    }
+    for (const [id, config] of ringing) {
+      if (notifications.has(id) || notificationFailures.has(id)) continue;
+      try {
+        const notification = new Notification(config.callerName, {
+          body: config.callerHandle || (config.mediaType === 'video' ? 'Incoming video call' : 'Incoming audio call'),
+          tag: 'unified-call-' + id,
+          requireInteraction: true,
+        });
+        notification.onclick = () => { window.focus(); notification.close(); notifications.delete(id); };
+        notifications.set(id, notification);
+      } catch (error) {
+        notificationFailures.add(id);
+        await UnifiedCallCore.invoke('reportPlatformError', {
+          callId: id, error: error.name || String(error),
+        });
+      }
+    }
+  }
+  function refreshNotifications() {
+    syncNotifications().catch(console.error);
+  }
   function stopSound() {
     ++soundGeneration;
     clearTimeout(expiryTimer); clearInterval(pulseTimer);
@@ -79,11 +112,15 @@
     } catch (error) { if (currentId === id && soundTicket === soundGeneration) await audioFailure(id, error); }
   }
   const audioEvents = new BroadcastChannel('flutter_unified_call_v2');
-  audioEvents.onmessage = () => { syncSound().catch(console.error); };
+  audioEvents.onmessage = () => {
+    syncSound().catch(console.error);
+    refreshNotifications();
+  };
   for (const name of ['pointerdown', 'keydown']) document.addEventListener(name, () => { unlock().catch(console.error); }, {capture: true});
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') { ++generation; stopSound(); }
     else syncSound().catch(console.error);
+    refreshNotifications();
   });
   window.addEventListener('blur', () => { pageFocused = false; ++generation; stopSound(); });
   window.addEventListener('focus', () => { pageFocused = true; syncSound().catch(console.error); });
@@ -117,6 +154,7 @@
       if (method === 'initialize') useWorker = nextWorker;
       if (method === 'initialize') { stopSound(); failedId = null; }
       await syncSound();
+      await syncNotifications();
       return result;
     }
   };

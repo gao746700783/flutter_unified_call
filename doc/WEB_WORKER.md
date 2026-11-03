@@ -8,6 +8,11 @@ resume reconcile expired calls. The durable inbox remains the recovery source.
 
 ## Page initialization
 
+When the page is still running but hidden, page mode shows a browser
+Notification for an unexpired ringing call if permission was granted. It closes
+that notification when the call ends or the page becomes visible. This fallback
+cannot receive push after the page is closed; use the host Worker for that case.
+
 `initialize()` enables foreground Banner/state handling without taking ownership
 of any Service Worker. After installing the host Worker adapter, use
 `initialize(webUseServiceWorker: true, webLaunchUrl: '/calls')` to route commands
