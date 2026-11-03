@@ -15,7 +15,10 @@ class UnifiedConnectionService : ConnectionService() {
             ?: return Connection.createFailedConnection(DisconnectCause(DisconnectCause.ERROR))
         if (call.getString("state") == "ended") return Connection.createFailedConnection(DisconnectCause(DisconnectCause.CANCELED))
         return (if (Build.VERSION.SDK_INT >= 34) EndpointCallConnection(runtime, id) else CallConnection(runtime, id)).apply {
-            if (Build.VERSION.SDK_INT >= 26) connectionProperties = Connection.PROPERTY_SELF_MANAGED
+            if (Build.VERSION.SDK_INT >= 26) {
+                connectionProperties = Connection.PROPERTY_SELF_MANAGED
+                connectionCapabilities = Connection.CAPABILITY_HOLD or Connection.CAPABILITY_SUPPORT_HOLD
+            }
             setCallerDisplayName(call.getJSONObject("config").getString("callerName"), TelecomManager.PRESENTATION_ALLOWED)
             setAudioModeIsVoip(true)
             runtime.connections[id] = this

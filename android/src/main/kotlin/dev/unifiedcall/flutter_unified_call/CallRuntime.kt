@@ -67,6 +67,10 @@ internal class CallRuntime private constructor(val context: Context) {
                         .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .build())
                 enableVibration(true)
+                vibrationPattern = longArrayOf(0, 400, 300, 400)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                setBypassDnd(true)
+                enableLights(true)
             })
             notifications.createNotificationChannel(NotificationChannel("unified_call_ongoing", "Ongoing calls", NotificationManager.IMPORTANCE_LOW))
         }
@@ -181,7 +185,7 @@ internal class CallRuntime private constructor(val context: Context) {
         builder.setSmallIcon(android.R.drawable.sym_call_incoming).setContentTitle(config.getString("callerName"))
             .setContentText(if (ringing) "Incoming ${config.optString("mediaType", "audio")} call" else "Call in progress")
             .setCategory(Notification.CATEGORY_CALL).setOngoing(true).setOnlyAlertOnce(!ringing)
-            .setContentIntent(open).setVisibility(Notification.VISIBILITY_PRIVATE)
+            .setContentIntent(open).setVisibility(if (ringing) Notification.VISIBILITY_PUBLIC else Notification.VISIBILITY_PRIVATE)
         val decline = action(id, if (ringing) "declined" else "ended")
         val accept = PendingIntent.getActivity(context, 0, launchIntent(id).setAction("accepted"), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val useCallStyle = Build.VERSION.SDK_INT >= 31 && ringing &&
@@ -197,6 +201,8 @@ internal class CallRuntime private constructor(val context: Context) {
             builder.setPriority(Notification.PRIORITY_MAX)
         }
         if (ringing) {
+            @Suppress("DEPRECATION")
+            builder.setPriority(Notification.PRIORITY_MAX)
             builder.setFullScreenIntent(open, true)
             if (Build.VERSION.SDK_INT >= 26) builder.setTimeoutAfter((config.getLong("expiresAt") - System.currentTimeMillis()).coerceAtLeast(1))
         }
