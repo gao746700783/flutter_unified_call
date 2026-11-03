@@ -1,19 +1,11 @@
-## 0.1.0-dev.1
+## 0.1.0
 
-- Decode native-channel nested JSON objects in payloads and event metadata.
-- Merge duplicate-call extra payloads without re-ringing or changing historical events.
-- Fall back explicitly when Android rejects CallStyle notifications.
-
-- Add typed Android Telecom audio endpoints and asynchronous route requests.
-- Add iOS native notification action entry for pre-Flutter cold-start persistence.
-- Add iOS looping foreground playback with lifecycle/state cleanup.
-- Add Web foreground tone/custom audio with gesture unlock and lifecycle cleanup.
-- Add typed permission outcomes and Android custom raw-resource ringtone configuration.
-- Add engine-independent models, state commands and durable event acknowledgment.
-- Add Android Telecom, notifications, lock-screen Activity, foreground call service,
-  native push entry and process-recovery expiry handling.
-- Add iOS actionable notifications and durable recovery without CallKit/PushKit.
-- Add Web IndexedDB state, host Worker adapter and cross-tab event synchronization.
-- Add customizable shared foreground Banner and complete integration example.
-- Add native, Dart/Widget and real-browser regression coverage.
-- Development release: outstanding platform verification is documented in doc/.
+- Android: 优化通知栏接听交互，前台就地静默接听，后台直达主页避免中转闪烁。
+- Android: 升级静音通知渠道至 v2，消除重叠双重铃声，并适配系统铃声音量与扬声器流类型。
+- Android: 支持原生推送免引擎入口 `UnifiedCall.showIncomingCall` 与 `cancelCall`，基于 `AtomicFile` 保证落盘安全。
+- Android: 支持 Self-managed Telecom、全屏来电界面与通话前台保活服务。
+- iOS: 基于 `UserNotifications`（免 CallKit/PushKit 限制）实现原生来电展示与 APNs 恢复机制。
+- iOS: 支持原生静态代理入口 `FlutterUnifiedCallPlugin.handleNotificationAction`，支持冷启动事件原子暂存。
+- Web: 基于 IndexedDB、BroadcastChannel 与 Service Worker 实现多标签页呼叫同步与恢复。
+- Flutter: 提供 `FlutterUnifiedCall` 核心 API 与通用前台横幅组件 `CallBannerHost`。
+- Initial release.
