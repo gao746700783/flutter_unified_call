@@ -3,6 +3,7 @@ package dev.unifiedcall.flutter_unified_call
 import android.app.*
 import android.content.*
 import android.media.AudioAttributes
+import android.media.AudioManager
 import android.media.Ringtone
 import android.media.RingtoneManager
 import android.net.Uri
@@ -224,6 +225,19 @@ internal class CallRuntime private constructor(val context: Context) {
         if (degraded) store.platformEvent(id, "platformError", mapOf(
             "operation" to "notification", "error" to "call_style_rejected", "fallback" to "generic"))
         if (ringing) {
+            try {
+                val am = context.getSystemService(AudioManager::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    am?.clearCommunicationDevice()
+                }
+                @Suppress("DEPRECATION")
+                am?.isSpeakerphoneOn = true
+                if (am?.mode == AudioManager.MODE_IN_COMMUNICATION) {
+                    am.mode = AudioManager.MODE_NORMAL
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("UnifiedCall", "prepareForRinging audio setup failed", e)
+            }
             try {
                 if (ringer == null) {
                     val r = RingtoneManager.getRingtone(context, ringtoneUri(ringtoneName()))

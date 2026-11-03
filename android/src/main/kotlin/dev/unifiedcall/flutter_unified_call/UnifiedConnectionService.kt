@@ -22,6 +22,8 @@ class UnifiedConnectionService : ConnectionService() {
             setCallerDisplayName(call.getJSONObject("config").getString("callerName"), TelecomManager.PRESENTATION_ALLOWED)
             runtime.connections[id] = this
             setRinging()
+            @Suppress("DEPRECATION")
+            setAudioRoute(CallAudioState.ROUTE_SPEAKER)
             runtime.showIncomingUi(id)
             android.os.Handler(mainLooper).post {
                 val state = runtime.store.get(id)?.getString("state")

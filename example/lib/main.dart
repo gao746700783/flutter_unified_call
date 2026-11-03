@@ -45,7 +45,7 @@ class _CallDemoState extends State<CallDemo> {
   }
   Future<void> _initialize() async {
     try {
-      await api.initialize(androidRingtoneName: 'demo_ringtone');
+      await api.initialize();
       final pending = await api.getPendingEvents();
       for (final event in pending) { _enqueue(event); }
       await _queue;
