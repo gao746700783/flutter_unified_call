@@ -59,7 +59,11 @@ labels, busy state, retry UI and foreground restoration. See the
 The main path is `ringing → accepted → connected → ended`. Only your media-engine
 success callback should call `setCallConnected`. Acceptance represents user intent.
 Decline, timeout and cancellation end ringing calls; ended calls cannot be revived
-by a duplicate incoming message with the same call ID.
+by a duplicate incoming message with the same call ID. Valid duplicate deliveries
+merge top-level `extra` keys (new values overwrite, including null), while retaining
+the original caller, expiry and state. They do not ring again or emit another
+`incoming` event. Historical inbox events stay unchanged; subsequent actions carry
+the merged payload.
 
 - `onEvent` provides live events, including system notification/hardware actions.
 - `getPendingEvents()` returns durable unacknowledged events.

@@ -42,7 +42,20 @@ final class CallStore {
               let expiry = config["expiresAt"] as? NSNumber,
               let media = config["mediaType"] as? String, ["audio", "video"].contains(media),
               config["extra"] is [String: Any], JSONSerialization.isValidJSONObject(config) else { throw CallStoreError.invalidPayload }
-        if calls[id] != nil || expiry.doubleValue <= now { return false }
+        if expiry.doubleValue <= now { return false }
+        if var existing = calls[id] {
+            guard let state = existing["state"] as? String, state != "ended",
+                  var original = existing["config"] as? [String: Any],
+                  let originalExpiry = original["expiresAt"] as? NSNumber,
+                  var extra = original["extra"] as? [String: Any],
+                  let updates = config["extra"] as? [String: Any],
+                  state != "ringing" || originalExpiry.doubleValue > now else { return false }
+            extra.merge(updates) { _, latest in latest }
+            original["extra"] = extra; existing["config"] = original
+            var updated = calls; updated[id] = existing
+            try commit(calls: updated, events: events, options: options)
+            return false
+        }
         let call: [String: Any] = ["config": config, "state": "ringing"]
         try emit(id: id, call: call, type: "incoming", now: now)
         return true

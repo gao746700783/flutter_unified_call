@@ -39,4 +39,37 @@ do {
     try unwritable.incoming(config)
     fatalError("Persistence failure swallowed")
 } catch { check(unwritable.events.isEmpty, "Failed write mutated memory") }
-print("PASS: dedupe, lifecycle, expiry, durable replay/ack and persistence rollback")
+let mergeURL = directory.appendingPathComponent("merge.json")
+let merging = try CallStore(url: mergeURL)
+check(try merging.incoming(config, now: now), "Merge setup failed")
+var duplicate = config
+// Only extra may change; identity and timeout stay with the original delivery.
+duplicate["callerName"] = "Changed"; duplicate["expiresAt"] = now + 60000
+duplicate["extra"] = ["room": "updated", "nullable": NSNull()]
+check(!(try merging.incoming(duplicate, now: now)), "Duplicate re-rang")
+let mergedConfig = merging.get("test")!["config"] as! [String: Any]
+check(mergedConfig["callerName"] as? String == "Alice", "Duplicate replaced caller")
+check((mergedConfig["expiresAt"] as! NSNumber).doubleValue == now + 30000, "Duplicate extended expiry")
+check((mergedConfig["extra"] as! [String: Any])["nullable"] is NSNull, "Null was lost")
+check(merging.events.count == 1, "Duplicate emitted an event")
+check((merging.events[0]["call"] as! [String: Any])["extra"] as! [String: String] == ["room": "one"], "Historical event mutated")
+let diskMerged = try CallStore(url: mergeURL).get("test")!["config"] as! [String: Any]
+check((diskMerged["extra"] as! [String: Any])["room"] as? String == "updated", "Merge not durable")
+try merging.transition("test", action: "accepted", now: now)
+let acceptedConfig = merging.events.last!["call"] as! [String: Any]
+check((acceptedConfig["extra"] as! [String: Any])["room"] as? String == "updated", "Acceptance lost merged extra")
+// A directory at the target path forces an atomic-write failure.
+try FileManager.default.removeItem(at: mergeURL)
+try FileManager.default.createDirectory(at: mergeURL, withIntermediateDirectories: false)
+duplicate["extra"] = ["room": "failed"]
+do {
+    try merging.incoming(duplicate, now: now)
+    fatalError("Merge failure swallowed")
+} catch {
+    let current = merging.get("test")!["config"] as! [String: Any]
+    check((current["extra"] as! [String: Any])["room"] as? String == "updated", "Failed merge mutated memory")
+}
+try FileManager.default.removeItem(at: mergeURL)
+try merging.transition("test", action: "ended", now: now)
+check(!(try merging.incoming(duplicate, now: now)), "Terminal duplicate revived")
+print("PASS: extra merge, historical snapshots, lifecycle, expiry, durable replay/ack and persistence rollback")

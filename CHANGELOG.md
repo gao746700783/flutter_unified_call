@@ -1,5 +1,9 @@
 ## 0.1.0-dev.1
 
+- Decode native-channel nested JSON objects in payloads and event metadata.
+- Merge duplicate-call extra payloads without re-ringing or changing historical events.
+- Fall back explicitly when Android rejects CallStyle notifications.
+
 - Add typed Android Telecom audio endpoints and asynchronous route requests.
 - Add iOS native notification action entry for pre-Flutter cold-start persistence.
 - Add iOS looping foreground playback with lifecycle/state cleanup.

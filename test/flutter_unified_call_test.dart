@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_unified_call/flutter_unified_call.dart';
 import 'package:flutter_unified_call/flutter_unified_call_platform_interface.dart';
@@ -41,6 +42,25 @@ void main() {
   test('rejects invalid identity and non JSON payloads', () {
     expect(() => IncomingCallConfig(callId: '', callerName: 'A', expiresAt: DateTime.utc(2030)), throwsArgumentError);
     expect(() => IncomingCallConfig(callId: '1', callerName: 'A', expiresAt: DateTime.utc(2030), extra: {'token': Object()}), throwsA(anything));
+  });
+  test('native codec nested maps survive event replay and remain immutable', () async {
+    const codec = StandardMessageCodec();
+    final original = CallEvent(eventId: 'native-event', type: CallEventType.audioEndpointsChanged,
+      call: IncomingCallConfig(callId: 'native', callerName: 'Alice', expiresAt: DateTime.utc(2030),
+        extra: {'nested': [{'nullable': null, 'room': 'one'}]}),
+      occurredAt: DateTime.utc(2026), metadata: {'endpoints': [{'id': 'speaker', 'route': 'speaker'}]});
+    final decoded = codec.decodeMessage(codec.encodeMessage(original.toMap())) as Map;
+    final fake = FakePlatform();
+    FlutterUnifiedCallPlatform.instance = fake;
+    fake.response = [decoded];
+    final event = (await FlutterUnifiedCall().getPendingEvents()).single;
+    expect(event.toMap(), original.toMap());
+    final endpoints = event.metadata['endpoints'] as List;
+    expect(() => endpoints.add({}), throwsUnsupportedError);
+    expect(() => (endpoints.single as Map)['id'] = 'changed', throwsUnsupportedError);
+    expect(() => IncomingCallConfig(callId: 'bad', callerName: 'Alice', expiresAt: DateTime.utc(2030),
+      extra: {'nested': <Object?, Object?>{1: 'invalid'}}), throwsA(anything));
+    await fake.controller.close();
   });
   test('replayed event retains identity until explicit acknowledgment', () async {
     final fake = FakePlatform();

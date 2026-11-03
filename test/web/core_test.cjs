@@ -23,9 +23,26 @@ const assert = require('node:assert/strict');
     const run = (page, method, args = {}) => page.evaluate(([method, args]) => UnifiedCallCore.invoke(method, args), [method, args]);
     await Promise.all([run(a, 'showIncomingCall', call), run(b, 'showIncomingCall', call)]);
     assert.equal((await run(a, 'getPendingEvents')).value.length, 1);
+    await b.evaluate(call => UnifiedCallCore.invoke('showIncomingCall', {...call,
+      callerName: 'Changed', expiresAt: call.expiresAt + 60000,
+      extra: JSON.parse('{"room":"updated","nullable":null,"__proto__":{"safe":true}}')}), call);
+    const merged = (await run(a, 'getActiveCalls')).value[0].config;
+    assert.equal(merged.callerName, 'Alice');
+    assert.equal(merged.expiresAt, call.expiresAt);
+    assert.equal(merged.extra.room, 'updated');
+    assert.equal(merged.extra.nullable, null);
+    assert.equal(await a.evaluate(async () => {
+      const extra = (await UnifiedCallCore.invoke('getActiveCalls')).value[0].config.extra;
+      return Object.hasOwn(extra, '__proto__') && extra.__proto__.safe === true &&
+        Object.getPrototypeOf(extra) === Object.prototype;
+    }), true);
+    assert.equal((await run(a, 'getPendingEvents')).value[0].call.extra.room, 'test');
+    await run(a, 'showIncomingCall', {...call, expiresAt: Date.now() - 1, extra: {room: 'expired'}});
+    assert.equal((await run(a, 'getActiveCalls')).value[0].config.extra.room, 'updated');
     await assert.rejects(run(a, 'setCallConnected', {callId: 'one'}), /Accept/);
     await Promise.all([run(a, 'acceptCall', {callId: 'one'}), run(b, 'declineCall', {callId: 'one'})]);
     assert.equal((await run(a, 'getPendingEvents')).value.length, 2);
+    assert.equal((await run(a, 'getPendingEvents')).value[1].call.extra.room, 'updated');
     const active = (await run(a, 'getActiveCalls')).value;
     if (active.length) { await run(a, 'setCallConnected', {callId: 'one'}); await run(a, 'endCall', {callId: 'one'}); }
     await a.reload();

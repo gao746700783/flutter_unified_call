@@ -38,7 +38,19 @@ internal class CallStore(context: Context, private val writeOverride: ((String) 
         require(config.optString("mediaType") in listOf("audio", "video")) { "Invalid media type" }
         require(config.get("expiresAt") is Number) { "expiresAt must be epoch milliseconds" }
         val expiry = config.getLong("expiresAt")
-        if (get(id) != null || expiry <= System.currentTimeMillis()) return false
+        val now = System.currentTimeMillis()
+        if (expiry <= now) return false
+        val existing = get(id)
+        if (existing != null) {
+            val original = existing.getJSONObject("config")
+            if (existing.getString("state") == "ended" ||
+                (existing.getString("state") == "ringing" && original.getLong("expiresAt") <= now)) return false
+            val extra = original.getJSONObject("extra")
+            val updates = config.getJSONObject("extra")
+            updates.keys().forEach { key -> extra.put(key, updates.get(key)) }
+            save()
+            return false
+        }
         val call = JSONObject().put("config", config).put("state", "ringing")
         calls.put(id, call); emit(call, "incoming"); return true
     }

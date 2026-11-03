@@ -1,6 +1,7 @@
 # Implementation status
 
-This is an in-progress implementation, not a release candidate.
+This development implementation has automated and device coverage. It is not a
+production release candidate until the remaining platform checks below pass.
 
 ## Implemented
 
@@ -30,11 +31,13 @@ This is an in-progress implementation, not a release candidate.
   Telecom/lock-screen UI runtime verification, API 34+ permission/device coverage,
   physical ringtone/audio behavior and coexistence validation.
 - iOS: physical-device sound/APNs and notification-action
-  verification, notification SDK coexistence, cold-start timing and SwiftPM checks.
+  verification, notification SDK coexistence and real APNs cold-start timing.
 - Web: actual Web Push/notification action verification, broader browser coverage,
   physical audio/focus policy coverage and Worker lifecycle failure tests.
-- Native compilation, device/integration testing and browser verification.
-- Final repository/author metadata and remaining platform release gates.
+- Storage retention policy for ended call tombstones and unacknowledged events;
+  current stores retain them indefinitely to avoid reviving old calls or losing events.
+- Commit/review the final source changes before publication. Repository and author
+  metadata are configured; no publication has been performed.
 
 ## Contract decisions
 
@@ -226,3 +229,45 @@ This is an in-progress implementation, not a release candidate.
   no passing API 33 runtime result is claimed for the fix.
 - Next requested phone run will retain the app with --keep-app-running. It needs
   the user available for the phone's install confirmation.
+
+
+## API 33 follow-up and duplicate payloads
+
+- User allowed the revised APK installation. The lifecycle driver passed on the
+  connected Xiaomi M2102J2SC, Android 13/API 33. Telecom driver also passed speaker
+  route callback, connected/end state, durable event order and narrowly checked
+  CallStyle degradation. A previous strict test assertion failed and is retained
+  as a failed run; the corrected assertion validates exact degradation metadata.
+- A separate replay of the installed test APK passed. System dumpsys captured
+  CallForegroundService with isForeground=true during connection; after completion
+  the package remained installed and no app services remained. Evidence captured
+  locally at /private/tmp/unified-call-api33-fgs.txt (not part of the package).
+- No Android system image was installed. No trusted lock-screen notification tap,
+  real Push-provider delivery, Bluetooth audio or API 34+ device route is claimed.
+- Duplicate valid call IDs now merge top-level extra keys on Android/iOS/Web,
+  preserving nulls, original expiry/state, historical event snapshots and no
+  additional incoming event. Terminal and expired deliveries cannot revive calls.
+- 30 Android native tests and Lint passed; Swift store merge/rollback regression
+  and real Chrome IndexedDB/Worker regression passed. Browser prototype-key
+  assertions execute in-page to avoid Playwright's special-key serialization.
+
+
+## Final development verification (2026-11-03)
+
+- Flutter StandardMessageCodec decodes nested objects as generic Maps. Fixed
+  recursive JSON freezing to validate string keys and preserve nested objects,
+  nulls and immutable lists/maps. Eleven Dart/Widget tests and analysis passed.
+- Final Android 13 and iOS 26.5 simulator lifecycle drivers both printed
+  DUPLICATE_EXTRA_NATIVE_VALIDATED and passed. Initial merge-test expiry equality
+  compared microseconds against the millisecond wire format; the assertion now
+  compares epoch milliseconds. The executed failure remains recorded in logs.
+- SwiftPM simulator build passed in an isolated checkout with package support
+  enabled. Main example remains configured for CocoaPods; its final driver build
+  also passed. One initial Xcode link attempt failed before a successful retry;
+  the final separate run compiled and executed the new assertions successfully.
+- Chrome core, ringtone and stopped-Worker Push tests passed. Release Web build
+  passed. One UI run saw missing script outputs during concurrent platform builds;
+  final UI verification on a separate sequential Web build passed both foreground
+  and Worker cross-tab banner/accept/connect/end flows.
+- Apache-2.0 and confirmed author/repository metadata are present. pub.dev dry-run
+  reports only the uncommitted Git changes warning; it did not publish the package.

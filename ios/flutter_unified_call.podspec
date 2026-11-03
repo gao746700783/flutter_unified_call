@@ -9,9 +9,9 @@ Pod::Spec.new do |s|
   s.description      = <<-DESC
 Incoming call state, actionable notifications and durable event recovery without CallKit.
                        DESC
-  s.homepage         = 'http://example.com'
+  s.homepage         = 'https://github.com/gao746700783/flutter_unified_call'
   s.license          = { :file => '../LICENSE' }
-  s.author           = { 'Your Company' => 'email@example.com' }
+  s.author           = { 'gao746700783' => 'xhg746700783@gmail.com' }
   s.source           = { :path => '.' }
   s.source_files = 'flutter_unified_call/Sources/flutter_unified_call/**/*.{h,m,mm,swift}'
   s.dependency 'Flutter'

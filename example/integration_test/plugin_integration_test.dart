@@ -27,7 +27,14 @@ void main() {
     final config = IncomingCallConfig(callId: id, callerName: 'Integration Test',
       expiresAt: DateTime.now().add(const Duration(seconds: 30)), extra: {'roomId': 'test-room'});
     await api.showIncomingCall(config);
-    await api.showIncomingCall(config);
+    await api.showIncomingCall(IncomingCallConfig(callId: id, callerName: 'Duplicate',
+      expiresAt: config.expiresAt.add(const Duration(seconds: 30)),
+      extra: {'roomId': 'updated-room', 'nullable': null}));
+    final merged = (await api.getActiveCalls()).single.config;
+    expect(merged.callerName, config.callerName);
+    expect(merged.expiresAt.millisecondsSinceEpoch, config.expiresAt.millisecondsSinceEpoch);
+    expect(merged.extra, {'roomId': 'updated-room', 'nullable': null});
+    debugPrint('DUPLICATE_EXTRA_NATIVE_VALIDATED');
     expect((await api.getActiveCalls()).single.state, CallState.ringing);
     await api.acceptCall(id);
     expect((await api.getActiveCalls()).single.state, CallState.accepted);
@@ -40,7 +47,9 @@ void main() {
     expectNotificationFallbacks(events);
     expect(events.where((e) => e.type != CallEventType.platformError).map((e) => e.type), [CallEventType.incoming, CallEventType.accepted,
       CallEventType.connected, CallEventType.ended]);
-    expect(events.every((e) => e.call.extra['roomId'] == 'test-room'), isTrue);
+    expect(events.first.call.extra['roomId'], 'test-room');
+    expect(events.where((e) => [CallEventType.accepted, CallEventType.connected,
+      CallEventType.ended].contains(e.type)).every((e) => e.call.extra['roomId'] == 'updated-room'), isTrue);
     expect((await api.getPendingEvents()).map((e) => e.eventId), events.map((e) => e.eventId));
     for (final event in events) { await api.acknowledgeEvent(event.eventId); }
     expect(await api.getPendingEvents(), isEmpty);

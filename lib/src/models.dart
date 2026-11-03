@@ -51,8 +51,14 @@ Map<String, Object?> _freezeMap(Map<String, Object?> value) {
     if (value == null || value is String || value is bool || value is int) return value;
     if (value is double && value.isFinite) return value;
     if (value is List) return List<Object?>.unmodifiable(value.map(freeze));
-    if (value is Map<String, Object?>) {
-      return Map<String, Object?>.unmodifiable(value.map((k, v) => MapEntry(k, freeze(v))));
+    if (value is Map) {
+      final converted = <String, Object?>{};
+      for (final entry in value.entries) {
+        final key = entry.key;
+        if (key is! String) throw ArgumentError('JSON object keys must be strings');
+        converted[key] = freeze(entry.value);
+      }
+      return Map<String, Object?>.unmodifiable(converted);
     }
     throw ArgumentError('extra must contain only finite JSON values');
   }

@@ -73,7 +73,14 @@
             case 'getOptions': value = root.options; break;
             case 'showIncomingCall': {
               validate(args);
-              if (Object.hasOwn(root.calls, args.callId) || args.expiresAt <= now) break;
+              if (args.expiresAt <= now) break;
+              if (Object.hasOwn(root.calls, args.callId)) {
+                const existing = root.calls[args.callId];
+                if (existing.state !== 'ended') {
+                  existing.config.extra = {...existing.config.extra, ...structuredClone(args.extra)};
+                }
+                break;
+              }
               // Define property explicitly so arbitrary call IDs cannot mutate prototypes.
               const call = {config: structuredClone(args), state: 'ringing'};
               Object.defineProperty(root.calls, args.callId, {value: call, writable: true, enumerable: true, configurable: true});

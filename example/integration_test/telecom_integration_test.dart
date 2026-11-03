@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:flutter_unified_call/flutter_unified_call.dart';
+import 'plugin_integration_test.dart' show expectNotificationFallbacks;
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -40,7 +41,8 @@ void main() {
       final active = await api.getActiveCalls();
       expect(active.map((call) => call.state), [CallState.connected],
         reason: received.map((e) => '${e.type.name}:${e.reason?.name}').join(', '));
-      expect(received.where((e) => e.type == CallEventType.platformError), isEmpty);
+      debugPrint('TELECOM_NOTIFICATION_FALLBACK_VALIDATION');
+      expectNotificationFallbacks(received);
       await api.endCall(id);
       expect(await api.getActiveCalls(), isEmpty);
       expect(received.where((e) => [CallEventType.incoming, CallEventType.accepted,

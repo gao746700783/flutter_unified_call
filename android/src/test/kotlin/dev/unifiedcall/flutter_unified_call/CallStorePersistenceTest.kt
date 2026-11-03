@@ -76,4 +76,50 @@ class CallStorePersistenceTest {
         preferences.edit().putString("state", "invalid legacy value").commit()
         assertEquals("accepted", CallStore(context).get("one")!!.getString("state"))
     }
+    @Test fun duplicateMergesExtraWithoutChangingIdentityOrHistoricalEvents() {
+        val store = CallStore(context)
+        val original = config().put("extra", JSONObject().put("room", "old").put("keep", true))
+        assertTrue(store.incoming(original))
+        val duplicate = config().put("callerName", "Changed").put("expiresAt", System.currentTimeMillis() + 60000)
+            .put("extra", JSONObject().put("room", "new").put("nullable", JSONObject.NULL))
+        assertFalse(store.incoming(duplicate))
+        val saved = CallStore(context).get("one")!!.getJSONObject("config")
+        assertEquals("Alice", saved.getString("callerName"))
+        assertEquals(original.getLong("expiresAt"), saved.getLong("expiresAt"))
+        assertEquals("new", saved.getJSONObject("extra").getString("room"))
+        assertTrue(saved.getJSONObject("extra").getBoolean("keep"))
+        assertTrue(saved.getJSONObject("extra").isNull("nullable"))
+        assertEquals(1, store.pending().size)
+        val incoming = (store.pending().single() as Map<*, *>)["call"] as Map<*, *>
+        assertEquals("old", (incoming["extra"] as Map<*, *>)["room"])
+        store.transition("one", "accepted")
+        val accepted = (store.pending().last() as Map<*, *>)["call"] as Map<*, *>
+        assertEquals("new", (accepted["extra"] as Map<*, *>)["room"])
+        store.transition("one", "ended")
+        assertFalse(store.incoming(config().put("extra", JSONObject().put("room", "ignored"))))
+        assertEquals("new", store.get("one")!!.getJSONObject("config").getJSONObject("extra").getString("room"))
+    }
+    @Test fun duplicateWriteFailureRollsBackExtraWithoutDispatch() {
+        var fail = false
+        val store = CallStore(context) { if (fail) throw IOException("Disk unavailable") }
+        store.incoming(config())
+        var dispatched = 0
+        store.onEvent = { dispatched++ }
+        fail = true
+        assertThrows(IOException::class.java) {
+            store.incoming(config().put("extra", JSONObject().put("room", "new")))
+        }
+        assertEquals(0, store.get("one")!!.getJSONObject("config").getJSONObject("extra").length())
+        assertEquals(1, store.pending().size)
+        assertEquals(0, dispatched)
+    }
+    @Test fun expiredDuplicateDoesNotMergeOrExtendRinging() {
+        val store = CallStore(context)
+        store.incoming(config())
+        val duplicate = config().put("expiresAt", System.currentTimeMillis() - 1)
+            .put("extra", JSONObject().put("room", "ignored"))
+        assertFalse(store.incoming(duplicate))
+        assertEquals(0, store.get("one")!!.getJSONObject("config").getJSONObject("extra").length())
+    }
+
 }

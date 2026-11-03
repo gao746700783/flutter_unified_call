@@ -23,9 +23,9 @@ The example's Audio output action handles empty lists, selection cancellation,
 busy commands and platform errors. It transmits the selected system ID unchanged.
 
 Verification: API 27/34 Robolectric tests cover identities, supported lists,
-invalid/stale endpoint/state rejection and mute deduplication. An API 27 physical
-Telecom driver test queried endpoints, requested the speaker and received the
-system speaker callback before completing the call lifecycle. An earlier run was
+invalid/stale endpoint/state rejection and mute deduplication. Physical Telecom
+driver tests on API 27 and API 33 queried endpoints, requested the speaker and
+received the system speaker callback before completing the call lifecycle. An earlier run was
 interrupted by external phone operation; the subsequent full run passed.
 Actual speaker sound, Bluetooth hardware and API 34+ device routing remain
 unverified. No Android 14+ AVD or system image is currently installed locally.
