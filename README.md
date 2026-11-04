@@ -4,9 +4,13 @@ An engine-agnostic incoming-call plugin for Android, iOS and Web. It coordinates
 call state, user actions, platform notifications and event recovery. The host
 application owns push transport, signaling and media connections.
 
-**Development version: not yet ready for production release.** See
-[implementation status](doc/IMPLEMENTATION_STATUS.md) for outstanding work and
-verified platform coverage. No package publication has been performed.
+Current version: `0.1.1`.
+
+**Development version: not yet ready for production release.** See the
+[documentation index](doc/README.md) for platform guides and the current
+[implementation status](doc/IMPLEMENTATION_STATUS.md), including outstanding
+work and verified platform coverage. Version `0.1.1` has been published to
+pub.dev.
 
 | Platform | Incoming UI | Background integration |
 | --- | --- | --- |
@@ -79,11 +83,10 @@ the merged payload.
 The plugin does not promise exactly-once signaling or media joins. Keep durable
 business idempotency records in your application when processing external actions.
 
-## Platform setup
+## Platform setup and detailed guides
 
-- [Android recovery, native push entry and foreground service](doc/ANDROID_RECOVERY.md).
-- [iOS delegate forwarding, APNs payload and native SDK entry](doc/IOS_INTEGRATION.md).
-- [Web host Worker setup, payload and browser requirements](doc/WEB_WORKER.md).
+- See [Platform setup and detailed guides](doc/README.md) for Android, iOS, Web,
+  audio routing and foreground banner documentation.
 
 Android merges notification, full-screen, own-call and phoneCall foreground-service
 permissions. Review them in the host manifest. Android 14+ full-screen access uses

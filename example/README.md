@@ -1,17 +1,24 @@
-# flutter_unified_call_example
+# flutter_unified_call example
 
-Demonstrates how to use the flutter_unified_call plugin.
+This app demonstrates the plugin's cross-platform call lifecycle, durable event
+recovery, permissions, foreground banner and Android audio endpoint controls. Its
+plugin dependency uses the parent directory, so it always exercises this checkout.
 
-## Getting Started
+## Run
 
-This project is a starting point for a Flutter application.
+From this directory, install dependencies and launch on a configured device or
+browser:
 
-A few resources to get you started if this is your first Flutter project:
+```sh
+flutter pub get
+flutter run
+```
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+The example requests notification permissions through explicit user actions.
+Configure platform push delivery and native notification delegate integration
+before testing background actions; see the [platform setup guides](../doc/README.md).
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## More information
+
+- [Package overview and API](../README.md)
+- [Implementation status and verification limits](../doc/IMPLEMENTATION_STATUS.md)

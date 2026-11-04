@@ -1,6 +1,6 @@
 name: flutter_unified_call
 description: "Engine-agnostic incoming call state, notifications and recovery for Android, iOS and Web. Android Telecom and iOS without CallKit."
-version: 0.1.0
+version: 0.1.1
 homepage: https://github.com/gao746700783/flutter_unified_call
 repository: https://github.com/gao746700783/flutter_unified_call
 issue_tracker: https://github.com/gao746700783/flutter_unified_call/issues

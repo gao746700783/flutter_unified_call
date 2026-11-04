@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'flutter_unified_call'
-  s.version          = '0.1.0'
+  s.version          = '0.1.1'
   s.summary          = 'Engine-agnostic incoming call notifications and recovery.'
   s.description      = <<-DESC
 Incoming call state, actionable notifications and durable event recovery without CallKit.
