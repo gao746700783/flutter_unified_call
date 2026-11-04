@@ -3,25 +3,44 @@ import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import '../flutter_unified_call.dart';
 
-/// Actions disable the default buttons until their platform command completes.
+/// Builder for a custom incoming-call card in [CallBannerHost].
+///
+/// The [busy] flag is true while an accept or decline command is pending.
+/// The callback receives the current [BuildContext], [IncomingCallConfig], and
+/// accept/decline actions. Disable custom controls while busy to avoid duplicate
+/// actions.
 typedef CallBannerBuilder = Widget Function(BuildContext context,
     IncomingCallConfig call, bool busy, VoidCallback accept, VoidCallback decline);
 
-/// Place inside MaterialApp.builder. Automatically enabled on iOS and Web.
-/// Restores active state without consuming the host application's event inbox.
+/// Displays active ringing calls as an in-app banner.
+///
+/// Place this widget inside `MaterialApp.builder`. It is enabled by default on
+/// iOS and Web; pass `enabled: true` to opt in on Android. It restores state from
+/// [FlutterUnifiedCall.getActiveCalls] and never reads or acknowledges the host
+/// application's durable event inbox. Subscribe to events and handle
+/// acknowledgment separately.
 class CallBannerHost extends StatefulWidget {
   const CallBannerHost({super.key, required this.child, this.controller,
     this.enabled, this.builder, this.acceptText = 'Accept', this.declineText = 'Decline',
     this.audioSubtitle = 'Incoming audio call', this.videoSubtitle = 'Incoming video call',
     this.onError});
+  /// Application content displayed beneath the banner.
   final Widget child;
+  /// Controller to use, or the shared [FlutterUnifiedCall.instance] by default.
   final FlutterUnifiedCall? controller;
+  /// Whether the banner is enabled; defaults to iOS and Web only.
   final bool? enabled;
+  /// Optional builder for each ringing call card.
   final CallBannerBuilder? builder;
+  /// Localized label for the accept action.
   final String acceptText;
+  /// Localized label for the decline action.
   final String declineText;
+  /// Subtitle used for audio calls when no caller handle is provided.
   final String audioSubtitle;
+  /// Subtitle used for video calls when no caller handle is provided.
   final String videoSubtitle;
+  /// Receives state restoration and action errors for the banner.
   final void Function(Object, StackTrace)? onError;
   @override
   State<CallBannerHost> createState() => _CallBannerHostState();

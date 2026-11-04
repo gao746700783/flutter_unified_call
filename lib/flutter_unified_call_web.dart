@@ -9,8 +9,13 @@ import 'flutter_unified_call_platform_interface.dart';
 @JS('UnifiedCallPage.invoke')
 external JSPromise<JSAny?> _invokePage(JSString method, JSAny? arguments);
 
-/// Uses the same IndexedDB transactions as the host's optional Worker adapter.
+/// Web implementation of the plugin platform contract.
+///
+/// Page state and the optional host-owned Worker adapter share IndexedDB
+/// transactions. Applications should use `FlutterUnifiedCall` rather than
+/// constructing this implementation directly.
 class FlutterUnifiedCallWeb extends FlutterUnifiedCallPlatform {
+  /// Registers this implementation with Flutter's Web plugin registry.
   static void registerWith(Registrar registrar) {
     FlutterUnifiedCallPlatform.instance = FlutterUnifiedCallWeb();
   }

@@ -1,12 +1,88 @@
 import 'dart:convert';
 
-/// Media is descriptive; this plugin never starts a media engine.
-enum CallMediaType { audio, video }
-enum CallState { ringing, accepted, connected, ended }
-enum CallEventType { incoming, accepted, declined, connected, ended, missed, audioRouteChanged, audioEndpointsChanged, muteToggled, platformError }
-enum CallEndReason { localEnded, remoteEnded, cancelled, declined, missed, failed }
+/// Descriptive media type; the plugin never starts a media engine.
+enum CallMediaType {
+  /// Audio-only call.
+  audio,
 
-/// Immutable, JSON-safe payload suitable for native persistence and Web Push.
+  /// Call that includes video.
+  video,
+}
+
+/// Lifecycle state maintained by the plugin for a call.
+enum CallState {
+  /// The call is awaiting an answer and has not expired.
+  ringing,
+
+  /// The user accepted; the host media engine may now connect.
+  accepted,
+
+  /// The host reported that its media connection succeeded.
+  connected,
+
+  /// The call is terminal and cannot be revived by duplicate delivery.
+  ended,
+}
+
+/// Types of events emitted by call state transitions and platform integrations.
+enum CallEventType {
+  /// A new incoming call was recorded.
+  incoming,
+
+  /// The user accepted a ringing call.
+  accepted,
+
+  /// The user declined a ringing call.
+  declined,
+
+  /// The call was marked connected by the host.
+  connected,
+
+  /// The call entered a terminal state.
+  ended,
+
+  /// A ringing call expired before it was answered.
+  missed,
+
+  /// The active Android Telecom audio route changed.
+  audioRouteChanged,
+
+  /// The available Android Telecom audio endpoints changed.
+  audioEndpointsChanged,
+
+  /// The system mute state changed during a Telecom call.
+  muteToggled,
+
+  /// A platform operation failed; inspect the event metadata for details.
+  platformError,
+}
+
+/// Reasons a call can enter the ended state.
+enum CallEndReason {
+  /// The local user or host ended the call.
+  localEnded,
+
+  /// The remote peer ended the call.
+  remoteEnded,
+
+  /// The call was cancelled before it connected.
+  cancelled,
+
+  /// The user declined the incoming call.
+  declined,
+
+  /// The ringing call expired without an answer.
+  missed,
+
+  /// Call setup or an underlying platform operation failed.
+  failed,
+}
+
+/// Immutable description of an incoming call.
+///
+/// [expiresAt] is an absolute time and is normalized to UTC. Values in [extra]
+/// must be finite JSON-compatible data because the payload is persisted and may
+/// cross a native or Web boundary.
 class IncomingCallConfig {
   IncomingCallConfig({
     required this.callId,
@@ -22,20 +98,27 @@ class IncomingCallConfig {
     }
   }
 
+  /// Stable identifier unique to this logical call.
   final String callId;
+  /// Display name presented by the platform UI.
   final String callerName;
+  /// Optional handle shown instead of the default media subtitle.
   final String? callerHandle;
+  /// Descriptive media type; it does not start a media engine.
   final CallMediaType mediaType;
   /// Absolute expiry prevents a delayed push from starting a fresh timeout.
   final DateTime expiresAt;
+  /// Immutable JSON-safe application data associated with this call.
   final Map<String, Object?> extra;
 
+  /// Converts this configuration to the plugin's platform-neutral wire format.
   Map<String, Object?> toMap() => {
     'callId': callId, 'callerName': callerName, 'callerHandle': callerHandle,
     'mediaType': mediaType.name, 'expiresAt': expiresAt.millisecondsSinceEpoch,
     'extra': extra,
   };
 
+  /// Creates a configuration from the plugin's platform-neutral wire format.
   factory IncomingCallConfig.fromMap(Map<String, Object?> map) => IncomingCallConfig(
     callId: map['callId'] as String,
     callerName: map['callerName'] as String,
@@ -67,22 +150,36 @@ Map<String, Object?> _freezeMap(Map<String, Object?> value) {
   return freeze(value) as Map<String, Object?>;
 }
 
+/// A durable or live event produced by a call transition or platform action.
+///
+/// Events use stable [eventId] values for replay deduplication. The host should
+/// acknowledge an event only after its business operation succeeds.
 class CallEvent {
   CallEvent({required this.eventId, required this.type, required this.call,
     required this.occurredAt, this.reason, Map<String, Object?> metadata = const {}})
       : metadata = _freezeMap(metadata);
+  /// Stable identifier used to deduplicate replay and live delivery.
   final String eventId;
+  /// Kind of event that occurred.
   final CallEventType type;
+  /// Call configuration captured with this event.
   final IncomingCallConfig call;
+  /// UTC time when this event was recorded.
   final DateTime occurredAt;
+  /// End reason when applicable.
   final CallEndReason? reason;
+  /// Event-specific platform or transition details.
   final Map<String, Object?> metadata;
+  /// The identifier of [call].
   String get callId => call.callId;
+
+  /// Converts this event to the plugin's platform-neutral wire format.
   Map<String, Object?> toMap() => {
     'eventId': eventId, 'type': type.name, 'call': call.toMap(),
     'occurredAt': occurredAt.millisecondsSinceEpoch, 'reason': reason?.name,
     'metadata': metadata,
   };
+  /// Creates an event from the plugin's platform-neutral wire format.
   factory CallEvent.fromMap(Map<String, Object?> map) => CallEvent(
     eventId: map['eventId'] as String,
     type: CallEventType.values.byName(map['type'] as String),
@@ -93,15 +190,40 @@ class CallEvent {
   );
 }
 
-enum CallPermissionState { granted, denied, notDetermined, unsupported, settingsRequired, unknown }
+enum CallPermissionState {
+  /// The capability is available to the application.
+  granted,
 
-/// Independent permission outcomes, including unknown future platform values.
-/// Kept separate because notification and full-screen access are independent.
+  /// The user denied access.
+  denied,
+
+  /// The user has not yet made a permission choice.
+  notDetermined,
+
+  /// The current platform does not provide this capability.
+  unsupported,
+
+  /// The user must change a system setting to grant access.
+  settingsRequired,
+
+  /// The platform returned a value this SDK version does not recognize.
+  unknown,
+}
+
+/// Permission results for capabilities managed independently by each platform.
+///
+/// A state may be [CallPermissionState.unsupported] on a platform that does not
+/// provide the capability, or [CallPermissionState.settingsRequired] when the
+/// user must change a system setting.
 class CallPermissionStatus {
   const CallPermissionStatus({required this.notifications, required this.fullScreenIntent, required this.telecom});
+  /// Notification display permission state.
   final CallPermissionState notifications;
+  /// Full-screen incoming call presentation permission state.
   final CallPermissionState fullScreenIntent;
+  /// Self-managed Telecom permission or availability state.
   final CallPermissionState telecom;
+  /// Creates permission results from the platform-neutral wire format.
   factory CallPermissionStatus.fromMap(Map<String, Object?> map) => CallPermissionStatus(
     notifications: _permission(map['notifications']),
     fullScreenIntent: _permission(map['fullScreenIntent']),
@@ -118,8 +240,11 @@ CallPermissionState _permission(Object? value) {
 /// Current platform-owned state, separate from the durable event inbox.
 class CallSnapshot {
   const CallSnapshot({required this.config, required this.state});
+  /// Call configuration for the current state.
   final IncomingCallConfig config;
+  /// Current lifecycle state maintained by the plugin.
   final CallState state;
+  /// Creates a snapshot from the platform-neutral wire format.
   factory CallSnapshot.fromMap(Map<String, Object?> map) => CallSnapshot(
     config: IncomingCallConfig.fromMap(Map<String, Object?>.from(map['config'] as Map)),
     state: CallState.values.byName(map['state'] as String),
@@ -127,13 +252,41 @@ class CallSnapshot {
 }
 
 
-/// Audio routing is exposed only for live Android Telecom connections.
-enum CallAudioRoute { earpiece, speaker, bluetooth, wiredHeadset, streaming, unknown }
+/// System audio routes that may be available on a live Android Telecom call.
+enum CallAudioRoute {
+  /// The device earpiece.
+  earpiece,
+
+  /// The device speaker.
+  speaker,
+
+  /// A Bluetooth audio device.
+  bluetooth,
+
+  /// A wired headset.
+  wiredHeadset,
+
+  /// A system-reported streaming route.
+  streaming,
+
+  /// A route not classified by the current SDK.
+  unknown,
+}
+
+/// An available audio output reported by Android Telecom.
+///
+/// The [id] is opaque. Pass it unchanged to `FlutterUnifiedCall.requestAudioEndpoint`.
+/// This API is unsupported on iOS,
+/// Web, and Android calls without a live Telecom connection.
 class CallAudioEndpoint {
   const CallAudioEndpoint({required this.id, required this.label, required this.route});
+  /// Opaque platform identifier for requesting this endpoint.
   final String id;
+  /// Human-readable label for display.
   final String label;
+  /// Best-effort route classification reported by the platform.
   final CallAudioRoute route;
+  /// Creates an endpoint from the platform-neutral wire format.
   factory CallAudioEndpoint.fromMap(Map<String, Object?> map) => CallAudioEndpoint(
     id: map['id'] as String,
     label: map['label'] as String,

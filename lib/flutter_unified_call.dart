@@ -3,19 +3,76 @@ import 'src/models.dart';
 export 'src/models.dart';
 export 'src/call_banner_host.dart';
 
-/// UI-independent entry point, also usable by registered background engines.
-/// Push delivery and media/signaling are owned by the host application.
+/// Coordinates incoming-call state and platform integrations for the host app.
+///
+/// Use [instance] as the shared controller in UI and registered background
+/// engines. Push delivery, signaling, business event handling, and media
+/// connections remain the host application's responsibility.
 class FlutterUnifiedCall {
+  /// Creates a controller backed by the registered platform implementation.
+  ///
+  /// Prefer [instance] when sharing call events and commands across the app.
   FlutterUnifiedCall();
+
+  /// The default controller used by the package example and banner UI.
   static final instance = FlutterUnifiedCall();
   FlutterUnifiedCallPlatform get _platform => FlutterUnifiedCallPlatform.instance;
+
+  /// Events delivered while this controller is listening.
+  ///
+  /// Live delivery is best effort. Use [getPendingEvents] after startup to
+  /// recover durable events, and deduplicate events by [CallEvent.eventId].
   late final Stream<CallEvent> onEvent = _platform.events.map(CallEvent.fromMap);
 
-  Future<void> initialize({String acceptText = 'Accept', String declineText = 'Decline',
-      bool enableTelecom = true, bool iosTimeSensitive = false, bool iosEnableRingtone = true,
-      String? iosRingtoneFileName, String? androidRingtoneName, bool webUseServiceWorker = false,
-      String? webLaunchUrl, String? webRingtoneUrl, bool webEnableRingtone = true,
-      bool androidForegroundBanner = false}) async {
+  /// Initializes call handling and applies platform-specific UI options.
+  ///
+  /// Call this before showing or receiving calls. Request permissions separately
+  /// in response to a deliberate user action. Configure [webUseServiceWorker]
+  /// only after installing the package's host-owned Worker adapter.
+  Future<void> initialize({
+    /// Label used for the accept action in platform UI and the default banner.
+    String acceptText = 'Accept',
+
+    /// Label used for the decline action in platform UI and the default banner.
+    String declineText = 'Decline',
+
+    /// Enables Android self-managed Telecom. Set to false to use notification
+    /// fallback UI instead.
+    bool enableTelecom = true,
+
+    /// Requests time-sensitive notification delivery on supported iOS versions.
+    /// User settings and entitlements still control actual delivery.
+    bool iosTimeSensitive = false,
+
+    /// Enables foreground ringtone playback and sounds for plugin-created local
+    /// notifications on iOS. Remote push sound remains controlled by the server.
+    bool iosEnableRingtone = true,
+
+    /// Optional CAF, WAV, or AIFF ringtone resource under 30 seconds in the iOS
+    /// main bundle.
+    String? iosRingtoneFileName,
+
+    /// Optional lowercase Android `res/raw` resource name, without its
+    /// extension.
+    String? androidRingtoneName,
+
+    /// Routes Web calls through an already-installed host-owned Worker adapter.
+    bool webUseServiceWorker = false,
+
+    /// Same-origin URL opened by a Web Worker notification action.
+    String? webLaunchUrl,
+
+    /// Optional HTTP(S) or relative URL for Web foreground ringtone playback.
+    String? webRingtoneUrl,
+
+    /// Enables foreground Web ringtone playback. Audio may require a user
+    /// gesture.
+    bool webEnableRingtone = true,
+
+    /// Uses `CallBannerHost` instead of Android's incoming notification while
+    /// foregrounded. Also mount the banner with `enabled: true`.
+    bool androidForegroundBanner = false,
+  }) async {
     await _platform.invoke('initialize', {
       'acceptText': acceptText, 'declineText': declineText, 'enableTelecom': enableTelecom,
       'iosTimeSensitive': iosTimeSensitive, 'iosEnableRingtone': iosEnableRingtone,
@@ -25,49 +82,118 @@ class FlutterUnifiedCall {
       'androidForegroundBanner': androidForegroundBanner,
     });
   }
-  /// Call from a Web user gesture after initialize; unsupported on native platforms.
+
+  /// Unlocks Web Audio playback from a user gesture after [initialize].
+  ///
+  /// This operation is unsupported on native platforms.
   Future<void> unlockWebAudio() async { await _platform.invoke('unlockWebAudio'); }
-  Future<void> showIncomingCall(IncomingCallConfig config) async {
+
+  /// Displays and persists an incoming call described by [config].
+  ///
+  /// The absolute expiry in [config] is preserved; a delayed delivery does not
+  /// restart its ringing duration. Platform and persistence failures are thrown.
+  Future<void> showIncomingCall(
+    /// Incoming call details, including its unique ID and absolute expiry.
+    IncomingCallConfig config,
+  ) async {
     await _platform.invoke('showIncomingCall', config.toMap());
   }
-  Future<List<CallAudioEndpoint>> getAudioEndpoints(String callId) async {
+
+  /// Returns available Android Telecom audio endpoints for [callId].
+  ///
+  /// Endpoint IDs are opaque and should be passed unchanged to
+  /// [requestAudioEndpoint]. This is unsupported without a live Android Telecom
+  /// connection.
+  Future<List<CallAudioEndpoint>> getAudioEndpoints(
+    /// ID of a call with an active Android Telecom connection.
+    String callId,
+  ) async {
     if (callId.trim().isEmpty) throw ArgumentError.value(callId, 'callId');
     final result = await _platform.invoke('getAudioEndpoints', {'callId': callId}) as List? ?? const [];
     return result.map((e) => CallAudioEndpoint.fromMap(Map<String, Object?>.from(e as Map))).toList(growable: false);
   }
-  Future<void> requestAudioEndpoint(String callId, String endpointId) {
+
+  /// Requests an audio route using an ID from [getAudioEndpoints].
+  ///
+  /// On Android API levels where the system reports the completed route change
+  /// asynchronously, observe [onEvent] for the resulting route event.
+  Future<void> requestAudioEndpoint(
+    /// ID of the call whose audio route should change.
+    String callId,
+    /// Opaque endpoint ID returned by [getAudioEndpoints].
+    String endpointId,
+  ) {
     if (endpointId.trim().isEmpty) throw ArgumentError.value(endpointId, 'endpointId');
     return _command('requestAudioEndpoint', callId, {'endpointId': endpointId});
   }
-  Future<void> acceptCall(String callId) => _command('acceptCall', callId);
-  Future<void> declineCall(String callId) => _command('declineCall', callId);
-  Future<void> setCallConnected(String callId) => _command('setCallConnected', callId);
-  Future<void> endCall(String callId, {CallEndReason reason = CallEndReason.localEnded}) =>
+
+  /// Records acceptance of a ringing call.
+  ///
+  /// This records user intent; it does not connect the host media engine.
+  Future<void> acceptCall(
+    /// ID of the ringing call to accept.
+    String callId,
+  ) => _command('acceptCall', callId);
+
+  /// Declines a ringing call and records the resulting event.
+  Future<void> declineCall(
+    /// ID of the ringing call to decline.
+    String callId,
+  ) => _command('declineCall', callId);
+
+  /// Marks a call connected after the host media engine confirms connection.
+  Future<void> setCallConnected(
+    /// ID of the call whose media connection succeeded.
+    String callId,
+  ) => _command('setCallConnected', callId);
+
+  /// Ends a call with a typed [reason].
+  Future<void> endCall(
+    /// ID of the call to end.
+    String callId, {
+    /// Reason recorded with the terminal event.
+    CallEndReason reason = CallEndReason.localEnded,
+  }) =>
       _command('endCall', callId, {'reason': reason.name});
+
+  /// Ends all active calls managed by this plugin.
   Future<void> endAllCalls() async { await _platform.invoke('endAllCalls'); }
   Future<void> _command(String method, String callId, [Map<String, Object?> extra = const {}]) async {
     if (callId.trim().isEmpty) throw ArgumentError.value(callId, 'callId');
     await _platform.invoke(method, {'callId': callId, ...extra});
   }
-  /// Durable unacknowledged events. Replay is at least once; dedupe by eventId.
-  /// Subscribe first, then drain this inbox; acknowledge only after handling.
+  /// Returns durable events that the host has not acknowledged.
+  ///
+  /// Replay is at least once and can overlap with [onEvent]. Subscribe first,
+  /// deduplicate by [CallEvent.eventId], and acknowledge only after handling.
   Future<List<CallEvent>> getPendingEvents() async {
     final result = await _platform.invoke('getPendingEvents') as List? ?? const [];
     return result.map((e) => CallEvent.fromMap(Map<String, Object?>.from(e as Map))).toList(growable: false);
   }
-  /// Active state for UI restoration; reading does not acknowledge any events.
+  /// Returns current calls for UI restoration without acknowledging events.
   Future<List<CallSnapshot>> getActiveCalls() async {
     final result = await _platform.invoke('getActiveCalls') as List? ?? const [];
     return result.map((e) => CallSnapshot.fromMap(Map<String, Object?>.from(e as Map)))
         .toList(growable: false);
   }
-  Future<void> acknowledgeEvent(String eventId) async {
+
+  /// Acknowledges [eventId] after the host has completed handling that event.
+  Future<void> acknowledgeEvent(
+    /// Stable ID of a successfully handled event.
+    String eventId,
+  ) async {
     await _platform.invoke('acknowledgeEvent', {'eventId': eventId});
   }
+
+  /// Reports current notification, full-screen, and Telecom permission states.
   Future<CallPermissionStatus> checkPermissions() async => CallPermissionStatus.fromMap(
     Map<String, Object?>.from(await _platform.invoke('checkPermissions') as Map));
+
+  /// Requests supported permissions; call from an explicit user action.
   Future<CallPermissionStatus> requestPermissions() async => CallPermissionStatus.fromMap(
     Map<String, Object?>.from(await _platform.invoke('requestPermissions') as Map));
+
+  /// Opens Android's full-screen intent settings when the platform supports it.
   Future<void> openFullScreenIntentSettings() async {
     await _platform.invoke('openFullScreenIntentSettings');
   }
