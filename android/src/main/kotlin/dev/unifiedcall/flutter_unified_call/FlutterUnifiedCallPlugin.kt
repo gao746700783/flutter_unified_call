@@ -12,7 +12,7 @@ import io.flutter.embedding.engine.plugins.activity.*
 import io.flutter.plugin.common.*
 
 class FlutterUnifiedCallPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel.StreamHandler,
-    ActivityAware, PluginRegistry.RequestPermissionsResultListener {
+    ActivityAware, PluginRegistry.RequestPermissionsResultListener, PluginRegistry.NewIntentListener {
     private lateinit var channel: MethodChannel
     private lateinit var eventChannel: EventChannel
     private lateinit var runtime: CallRuntime
@@ -89,12 +89,27 @@ class FlutterUnifiedCallPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
         if (requestCode != 8721) return false
         permissionResult?.success(permissions()); permissionResult = null; return true
     }
-    override fun onAttachedToActivity(binding: ActivityPluginBinding) { this.binding = binding; binding.addRequestPermissionsResultListener(this) }
+    override fun onAttachedToActivity(binding: ActivityPluginBinding) {
+        this.binding = binding
+        binding.addRequestPermissionsResultListener(this)
+        binding.addOnNewIntentListener(this)
+        handleAcceptIntent(binding.activity.intent)
+    }
+    override fun onNewIntent(intent: Intent): Boolean = handleAcceptIntent(intent)
+    private fun handleAcceptIntent(intent: Intent?): Boolean {
+        if (intent?.getStringExtra("unifiedCallAction") != "accepted") return false
+        val id = intent.getStringExtra("callId") ?: return false
+        intent.removeExtra("unifiedCallAction")
+        runtime.act(id, "accepted")
+        return true
+    }
     override fun onDetachedFromActivityForConfigChanges() { detach(false) }
     override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) { onAttachedToActivity(binding) }
     override fun onDetachedFromActivity() { detach(true) }
     private fun detach(fail: Boolean) {
-        binding?.removeRequestPermissionsResultListener(this); binding = null
+        binding?.removeRequestPermissionsResultListener(this)
+        binding?.removeOnNewIntentListener(this)
+        binding = null
         if (fail) { permissionResult?.error("activity_detached", "Activity closed during permission request", null); permissionResult = null }
     }
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {

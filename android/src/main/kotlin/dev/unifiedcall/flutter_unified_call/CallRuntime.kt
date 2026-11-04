@@ -214,6 +214,14 @@ internal class CallRuntime private constructor(val context: Context) {
     }
     private fun action(id: String, name: String): PendingIntent {
         if (name == "accepted") {
+            val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            if (launch != null) {
+                launch.putExtra("unifiedCallAction", "accepted")
+                    .putExtra("callId", id)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                return PendingIntent.getActivity(context, id.hashCode(), launch,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            }
             val intent = Intent(context, IncomingCallActivity::class.java).setAction(name)
                 .setData(Uri.parse("unified-call://action/${Uri.encode(id)}/$name")).putExtra("callId", id)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -225,9 +233,55 @@ internal class CallRuntime private constructor(val context: Context) {
                 .setData(Uri.parse("unified-call://action/${Uri.encode(id)}/$name")).putExtra("callId", id),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
-    fun launchIntent(id: String): Intent = Intent(context, IncomingCallActivity::class.java)
-        .setData(Uri.parse("unified-call://incoming/${Uri.encode(id)}")).putExtra("callId", id)
-        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+    fun launchIntent(id: String): Intent =
+        context.packageManager.getLaunchIntentForPackage(context.packageName)
+            ?.addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP,
+            )
+            ?: Intent(context, IncomingCallActivity::class.java)
+                .setData(Uri.parse("unified-call://incoming/${Uri.encode(id)}"))
+                .putExtra("callId", id)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+    fun foregroundNotification(): Notification {
+        val id = ongoingTelecomIds().firstOrNull() ?: return Notification.Builder(context)
+            .setSmallIcon(android.R.drawable.sym_call_incoming)
+            .setContentTitle("Call in progress")
+            .setCategory(Notification.CATEGORY_CALL)
+            .setOngoing(true)
+            .build()
+        val config = store.get(id)?.optJSONObject("config")
+        val callerName = config?.optString("callerName").orEmpty().ifEmpty {
+            "Call in progress"
+        }
+        val end = action(id, "ended")
+        val builder = if (Build.VERSION.SDK_INT >= 26) {
+            Notification.Builder(context, "unified_call_ongoing")
+        } else {
+            Notification.Builder(context)
+        }
+        builder.setSmallIcon(android.R.drawable.sym_call_incoming)
+            .setContentTitle(callerName)
+            .setContentText("Call in progress")
+            .setCategory(Notification.CATEGORY_CALL)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setVisibility(Notification.VISIBILITY_PRIVATE)
+            .setContentIntent(PendingIntent.getActivity(
+                context,
+                0,
+                launchIntent(id),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            ))
+        if (Build.VERSION.SDK_INT >= 31) {
+            val person = Person.Builder().setName(callerName).build()
+            builder.setStyle(Notification.CallStyle.forOngoingCall(person, end))
+        } else {
+            builder.addAction(Notification.Action.Builder(null, "Hang up", end).build())
+        }
+        return builder.build()
+    }
     private fun show(call: JSONObject) {
         val config = call.getJSONObject("config")
         val id = config.getString("callId")
@@ -264,8 +318,9 @@ internal class CallRuntime private constructor(val context: Context) {
         }
         val notification = builder.build()
         if (ringing) notification.flags = notification.flags or Notification.FLAG_INSISTENT
-        val suppressed = ringing && isAppForeground &&
-            store.options().optBoolean("androidForegroundBanner", false)
+        val suppressed = (ringing && isAppForeground &&
+            store.options().optBoolean("androidForegroundBanner", false)) ||
+            (!ringing && ongoingTelecomIds().size == 1)
         val degraded = if (suppressed) {
             notifications.cancel(id, 1)
             false

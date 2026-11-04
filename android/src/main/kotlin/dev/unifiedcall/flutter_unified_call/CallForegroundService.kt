@@ -12,16 +12,9 @@ class CallForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val runtime = CallRuntime.get(this)
         try {
-            val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, "unified_call_ongoing") else Notification.Builder(this)
-            builder.setSmallIcon(android.R.drawable.sym_call_incoming).setContentTitle("Call in progress")
-                .setCategory(Notification.CATEGORY_CALL).setOngoing(true).setOnlyAlertOnce(true)
-                .setVisibility(Notification.VISIBILITY_PRIVATE)
-            packageManager.getLaunchIntentForPackage(packageName)?.let {
-                builder.setContentIntent(PendingIntent.getActivity(this, 0, it,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
-            }
-            if (Build.VERSION.SDK_INT >= 29) startForeground(197701, builder.build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL)
-            else startForeground(197701, builder.build())
+            val notification = runtime.foregroundNotification()
+            if (Build.VERSION.SDK_INT >= 29) startForeground(197701, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL)
+            else startForeground(197701, notification)
             // End may race with delivery of startForegroundService. Promote first
             // to satisfy the deadline, then remove the obsolete notification.
             if (runtime.ongoingTelecomIds().isEmpty()) {
