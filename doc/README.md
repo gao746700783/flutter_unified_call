@@ -17,3 +17,4 @@ flow and API overview. Use these guides for platform integration details.
 ## Project status
 
 - [Implementation status, verification and release gaps](IMPLEMENTATION_STATUS.md)
+- [Contribution, commit and publishing guide](CONTRIBUTING.md)
