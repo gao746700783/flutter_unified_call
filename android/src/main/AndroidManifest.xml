@@ -8,7 +8,8 @@
     <application>
         <activity android:name=".IncomingCallActivity" android:exported="false"
             android:excludeFromRecents="true" android:launchMode="singleTop"
-            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+            android:showWhenLocked="true" android:turnScreenOn="true"
+            android:theme="@android:style/Theme.Material.NoActionBar" />
         <receiver android:name=".CallTimeoutReceiver" android:exported="false" />
         <receiver android:name=".CallActionReceiver" android:exported="false" />
         <service android:name=".CallForegroundService" android:exported="false" android:foregroundServiceType="phoneCall" />

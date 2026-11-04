@@ -244,6 +244,21 @@ internal class CallRuntime private constructor(val context: Context) {
                 .setData(Uri.parse("unified-call://incoming/${Uri.encode(id)}"))
                 .putExtra("callId", id)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+
+    private fun fullScreenIntent(id: String): PendingIntent {
+        val intent = Intent(context, IncomingCallActivity::class.java)
+            .setAction("incoming")
+            .setData(Uri.parse("unified-call://fullscreen/${Uri.encode(id)}"))
+            .putExtra("callId", id)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        return PendingIntent.getActivity(
+            context,
+            id.hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
     fun foregroundNotification(): Notification {
         val id = ongoingTelecomIds().firstOrNull() ?: return Notification.Builder(context)
             .setSmallIcon(android.R.drawable.sym_call_incoming)
@@ -309,7 +324,7 @@ internal class CallRuntime private constructor(val context: Context) {
         if (ringing) {
             @Suppress("DEPRECATION")
             builder.setPriority(Notification.PRIORITY_MAX)
-            builder.setFullScreenIntent(open, true)
+            builder.setFullScreenIntent(fullScreenIntent(id), true)
             if (Build.VERSION.SDK_INT >= 26) builder.setTimeoutAfter((config.getLong("expiresAt") - System.currentTimeMillis()).coerceAtLeast(1))
         }
         if (Build.VERSION.SDK_INT < 26 && ringing) {
@@ -326,7 +341,6 @@ internal class CallRuntime private constructor(val context: Context) {
             false
         } else if (useCallStyle) postCallStyleWithFallback(notification, {
             builder.setStyle(null)
-            builder.setFullScreenIntent(null, false)
             val declineAction = Notification.Action.Builder(null, store.options().optString("declineText", "Decline"), decline).build()
             val acceptAction = Notification.Action.Builder(null, store.options().optString("acceptText", "Accept"), accept).build()
             builder.setActions(declineAction, acceptAction)

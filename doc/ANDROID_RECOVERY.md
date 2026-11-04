@@ -12,6 +12,26 @@ Recovered ringing notifications currently use the notification fallback rather
 than recreating a Telecom connection. Fresh incoming calls still use Telecom when
 enabled. Full Telecom recovery and device verification remain pending.
 
+## Lock-screen incoming calls
+
+For a ringing call, the notification's full-screen intent opens the plugin's
+`IncomingCallActivity`, which shows the caller name, call state, and accept/decline
+actions. The plugin declares `showWhenLocked` and `turnScreenOn` on the Activity
+in the merged manifest and also sets the corresponding runtime APIs on API 27+;
+API 24–26 use legacy window flags. Tapping the notification body continues to
+open the host app's launcher activity. If a device or OEM blocks full-screen
+launches, only the notification can be shown.
+
+The system decides whether to launch the full-screen activity. The incoming
+notification must remain enabled and use a high-importance channel. On Android
+14+, the host app must also be allowed to use full-screen intents; check
+`checkPermissions().fullScreenIntent` and direct the user to the system setting
+when it reports `settingsRequired`. Without that access, Android may show a
+heads-up notification instead of launching the activity. Some OEMs also require
+their app-specific "Show on Lock Screen" setting. OEM policy, Do Not Disturb,
+user settings, and device state can still prevent screen wake or alter lock-screen
+presentation. The plugin cannot bypass those system decisions.
+
 Timeouts use Handler while the process is alive, system notification timeout on
 API 26+, and setAndAllowWhileIdle with an explicit non-exported receiver as an
 additional process-independent reconciliation trigger. Accepting, connecting or
@@ -116,9 +136,10 @@ is independently covered by Robolectric.
 The API 33 Xiaomi device rejected the incoming CallStyle notification with the
 explicit policy error requiring a foreground-service notification or effective
 fullScreenIntent. The code now retries that specific policy rejection as a generic
-call-category notification retaining answer/decline actions, emits a durable
-platformError with notification/call_style_rejected/generic metadata, and lets
-unrelated errors or failed fallback posting propagate. Ongoing per-call
+call-category notification retaining answer/decline actions and the full-screen
+intent to `IncomingCallActivity`. It emits a durable `platformError` with
+notification/call_style_rejected/generic metadata and lets unrelated errors or
+failed fallback posting propagate. Ongoing per-call
 notifications use normal call-category actions; the independent phoneCall service
 continues to own its foreground notification. API 34 without full-screen access
 preselects the generic incoming layout.
