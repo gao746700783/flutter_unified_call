@@ -10,6 +10,7 @@ import android.provider.Settings
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.*
 import io.flutter.plugin.common.*
+import org.json.JSONObject
 
 class FlutterUnifiedCallPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel.StreamHandler,
     ActivityAware, PluginRegistry.RequestPermissionsResultListener, PluginRegistry.NewIntentListener {
@@ -35,6 +36,14 @@ class FlutterUnifiedCallPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
             when (call.method) {
                 "initialize" -> { runtime.configure(args); result.success(null) }
                 "showIncomingCall" -> { runtime.incoming(args); result.success(null) }
+                "updateCall" -> {
+                    require(!id.isNullOrBlank()) { "Missing callId" }
+                    val callerName = args["callerName"] as? String
+                    val callerHandle = args["callerHandle"] as? String
+                    val extra = (args["extra"] as? Map<*, *>)?.let { JSONObject(it) }
+                    runtime.updateCall(id, callerName, callerHandle, extra)
+                    result.success(null)
+                }
                 "getPendingEvents" -> { runtime.reconcileExpiry(); result.success(runtime.store.pending()) }
                 "getActiveCalls" -> {
                     runtime.reconcileExpiry()

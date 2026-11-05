@@ -99,6 +99,22 @@ class FlutterUnifiedCall {
     await _platform.invoke('showIncomingCall', config.toMap());
   }
 
+  /// Updates ongoing call details in place (e.g. caller name, handle, extra).
+  Future<void> updateCall({
+    required String callId,
+    String? callerName,
+    String? callerHandle,
+    Map<String, Object?>? extra,
+  }) async {
+    if (callId.trim().isEmpty) throw ArgumentError.value(callId, 'callId');
+    await _platform.invoke('updateCall', {
+      'callId': callId,
+      if (callerName != null) 'callerName': callerName,
+      if (callerHandle != null) 'callerHandle': callerHandle,
+      if (extra != null) 'extra': extra,
+    });
+  }
+
   /// Returns available Android Telecom audio endpoints for [callId].
   ///
   /// Endpoint IDs are opaque and should be passed unchanged to

@@ -54,6 +54,22 @@ internal class CallStore(context: Context, private val writeOverride: ((String) 
         val call = JSONObject().put("config", config).put("state", "ringing")
         calls.put(id, call); emit(call, "incoming"); return true
     }
+    fun update(id: String, callerName: String?, callerHandle: String?, extraUpdates: JSONObject?): JSONObject? {
+        val call = get(id) ?: return null
+        val config = call.getJSONObject("config")
+        if (!callerName.isNullOrBlank()) {
+            config.put("callerName", callerName)
+        }
+        if (callerHandle != null) {
+            config.put("callerHandle", callerHandle)
+        }
+        if (extraUpdates != null) {
+            val extra = config.optJSONObject("extra") ?: JSONObject().also { config.put("extra", it) }
+            extraUpdates.keys().forEach { key -> extra.put(key, extraUpdates.get(key)) }
+        }
+        save()
+        return call
+    }
     fun transition(id: String, action: String, reason: String? = null): Boolean {
         val call = get(id) ?: return false
         val state = call.getString("state")
@@ -61,7 +77,9 @@ internal class CallStore(context: Context, private val writeOverride: ((String) 
         if ((action == "accepted" || action == "declined" || action == "missed") && state != "ringing") return false
         if (action == "connected") {
             if (state == "connected") return false
-            check(state == "accepted") { "Accept the call before connecting" }
+            val isOutgoing = call.getJSONObject("config").optBoolean("outgoing", false) ||
+                call.getJSONObject("config").optJSONObject("extra")?.optBoolean("outgoing") == true
+            check(state == "accepted" || (state == "ringing" && isOutgoing)) { "Accept the call before connecting" }
         }
         call.put("state", if (action == "accepted" || action == "connected") action else "ended")
         emit(call, action, reason); return true
