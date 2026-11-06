@@ -4,7 +4,7 @@ An engine-agnostic incoming-call plugin for Android, iOS and Web. It coordinates
 call state, user actions, platform notifications and event recovery. The host
 application owns push transport, signaling and media connections.
 
-Current source version: `0.2.0` (release preparation; not published by this change).
+Current source version: `0.3.0` (release preparation; not published by this change).
 
 **Development version: not yet ready for production release.** See the
 [documentation index](doc/README.md) for platform guides and the current
@@ -28,7 +28,7 @@ Add the package to your Flutter application's `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  flutter_unified_call: ^0.2.0
+  flutter_unified_call: ^0.3.0
 ```
 
 Then run `flutter pub get`. The package does not provide push transport,

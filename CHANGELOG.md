@@ -1,7 +1,6 @@
-## Unreleased
+## 0.3.0 - 2026-11-06
 
 - Android: 前台服务成功显示通知后才移除重复通知；服务启动、提升失败或销毁时恢复仍在进行的通话通知。
-
 - Flutter/Android/iOS/Web: 新增 `OutgoingCallConfig`、`CallDirection`、`CallKind` 和独立 `startOutgoingCall`，串联持久化、事件回放及 setup 超时；支持可选 `setCallConnecting`。
 - Android: 点对点呼出使用 Telecom outgoing Connection，提供静默呼出通知和取消/挂断；创建/加入会议及会中通知默认仅打开会议页，不再提供挂断或注册电话式连接。
 - Call state: 呼出超时记录 `ended/unanswered`，加入会议超时记录 `ended/failed`，不再混入未接来电；冷启动清理无法恢复的本地媒体状态。
