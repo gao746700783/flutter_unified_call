@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="unified_call_acceptText">接听</string>
+    <string name="unified_call_declineText">拒绝</string>
+    <string name="unified_call_hangupText">结束通话</string>
+    <string name="unified_call_audioSubtitle">语音来电</string>
+    <string name="unified_call_videoSubtitle">视频来电</string>
+    <string name="unified_call_incomingTitle">来电</string>
+    <string name="unified_call_ongoingText">通话中</string>
+    <string name="unified_call_connectingText">正在接通</string>
+    <string name="unified_call_connectedText">已接通</string>
+    <string name="unified_call_outgoingText">正在呼叫</string>
+    <string name="unified_call_meetingText">会议中</string>
+    <string name="unified_call_meetingInvitationText">邀请你加入会议</string>
+    <string name="unified_call_unknownCallerText">未知来电者</string>
+    <string name="unified_call_callerAvatarText">来电者头像</string>
+    <string name="unified_call_incomingChannelName">来电通知</string>
+    <string name="unified_call_ongoingChannelName">通话中</string>
+    <string name="unified_call_incomingChannelDescription">语音和视频来电通知</string>
+    <string name="unified_call_updateErrorText">无法更新通话</string>
+    <string name="unified_call_retryText">重试</string>
+    <string name="unified_call_meetingNamePrefix">会议名称：</string>
+</resources>

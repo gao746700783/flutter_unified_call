@@ -16,7 +16,7 @@ const assert = require('node:assert/strict');
   let browser;
   try {
     browser = await chromium.launch({channel: 'chrome', headless: true});
-    const context = await browser.newContext({permissions: ['notifications']});
+    const context = await browser.newContext({permissions: ['notifications'], locale: 'zh-CN'});
     const page = await context.newPage(); page.setDefaultTimeout(10000);
     const origin = `http://127.0.0.1:${server.address().port}`;
     await page.goto(origin + '/observer');
@@ -36,9 +36,11 @@ const assert = require('node:assert/strict');
     const config = {callId: 'background', callerName: 'Push Test', mediaType: 'audio', expiresAt: Date.now() + 30000, extra: {room: 'test'}};
     await push({flutter_unified_call: config});
     await page.waitForFunction(async () => (await (await navigator.serviceWorker.getRegistration('/calls/')).getNotifications()).some(n => n.data.unifiedCallId === 'background'));
-    const notes = await page.evaluate(async () => (await (await navigator.serviceWorker.getRegistration('/calls/')).getNotifications()).map(n => ({title: n.title, id: n.data.unifiedCallId, actions: n.actions.map(a => a.action)})));
+    const notes = await page.evaluate(async () => (await (await navigator.serviceWorker.getRegistration('/calls/')).getNotifications()).map(n => ({title: n.title, id: n.data.unifiedCallId, body: n.body, labels: n.actions.map(a => a.title), actions: n.actions.map(a => a.action)})));
     assert.equal(notes[0].title, 'Push Test');
     assert.deepEqual(notes[0].actions, ['accepted', 'declined']);
+    assert.equal(notes[0].body, '语音来电');
+    assert.deepEqual(notes[0].labels, ['接听', '拒绝']);
     await cdp.send('ServiceWorker.stopAllWorkers');
     await push({flutter_unified_call: {type: 'cancel', callId: 'background'}});
     await page.waitForFunction(async () => (await (await navigator.serviceWorker.getRegistration('/calls/')).getNotifications()).length === 0);
@@ -54,6 +56,33 @@ const assert = require('node:assert/strict');
     assert.deepEqual(events.map(e => e.type), ['incoming', 'ended']);
     assert.equal(events[1].reason, 'cancelled');
     assert.equal(events[1].call.extra.room, 'test');
+    await page.evaluate(async () => {
+      const registration = await navigator.serviceWorker.getRegistration('/calls/');
+      await new Promise((resolve, reject) => {
+        const channel = new MessageChannel();
+        const timeout = setTimeout(() => reject(new Error('Initialize RPC timeout')), 5000);
+        channel.port1.onmessage = event => {
+          clearTimeout(timeout); channel.port1.close();
+          event.data.ok ? resolve() : reject(new Error(event.data.error));
+        };
+        registration.active.postMessage({type: 'unified-call', method: 'initialize', args: {
+          audioSubtitle: '语音邀请', acceptText: '加入', declineText: '忽略',
+        }}, [channel.port2]);
+      });
+    });
+    await cdp.send('ServiceWorker.stopAllWorkers');
+    await push({flutter_unified_call: {...config, callId: 'custom-text', expiresAt: Date.now() + 30000}});
+    const custom = await page.evaluate(async () => {
+      const registration = await navigator.serviceWorker.getRegistration('/calls/');
+      const deadline = Date.now() + 10000;
+      while (Date.now() < deadline) {
+        const note = (await registration.getNotifications()).find(n => n.data.unifiedCallId === 'custom-text');
+        if (note) return {body: note.body, labels: note.actions.map(a => a.title)};
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      throw new Error('Custom notification did not appear');
+    });
+    assert.deepEqual(custom, {body: '语音邀请', labels: ['加入', '忽略']});
     console.log('PASS: browser-delivered Push, background system notification/actions, Worker restart/cancel and durable inbox');
   } finally { if (browser) await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

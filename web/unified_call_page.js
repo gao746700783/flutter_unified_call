@@ -21,6 +21,7 @@
     const enabled = !useWorker && hidden && typeof Notification === 'function' &&
       Notification.permission === 'granted';
     const calls = enabled ? (await UnifiedCallCore.invoke('getActiveCalls')).value : [];
+    const options = enabled ? (await UnifiedCallCore.invoke('getOptions')).value : {};
     const ringing = new Map(calls.filter(call => call.state === 'ringing' &&
       call.config.expiresAt > Date.now()).map(call => [call.config.callId, call.config]));
     for (const [id, notification] of notifications) {
@@ -30,7 +31,7 @@
       if (notifications.has(id) || notificationFailures.has(id)) continue;
       try {
         const notification = new Notification(config.callerName, {
-          body: config.callerHandle || (config.mediaType === 'video' ? 'Incoming video call' : 'Incoming audio call'),
+          body: config.callerHandle || UnifiedCallCore.text(options, config.mediaType === 'video' ? 'videoSubtitle' : 'audioSubtitle'),
           tag: 'unified-call-' + id,
           requireInteraction: true,
         });

@@ -104,9 +104,11 @@ const assert = require('node:assert/strict');
         close() { this.closed = true; }
       };
     });
+    await a.evaluate(() => UnifiedCallPage.invoke('initialize', {webEnableRingtone: false, audioSubtitle: 'Voice invitation'}));
     await a.evaluate(call => UnifiedCallPage.invoke('showIncomingCall',
       {...call, callId: 'hidden-page', expiresAt: Date.now() + 30000}), call);
     assert.equal(await a.evaluate(() => window.__callNotices.at(-1).title), 'Alice');
+    assert.equal(await a.evaluate(() => window.__callNotices.at(-1).options.body), 'Voice invitation');
     await a.evaluate(() => UnifiedCallPage.invoke('declineCall', {callId: 'hidden-page'}));
     assert.equal(await a.evaluate(() => window.__callNotices.at(-1).closed), true);
     console.log('PASS: browser IndexedDB concurrency, lifecycle, replay/ack, expiry, arbitrary IDs, Worker RPC/shared state');

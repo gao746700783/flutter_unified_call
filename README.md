@@ -110,6 +110,68 @@ when its business operation fails. Use
 `getActiveCalls()` separately to restore visible call state; it does not consume
 the event inbox.
 
+## Shared text and language
+
+Notifications, Android full-screen UI and the default banner share `CallTexts`:
+
+```dart
+await FlutterUnifiedCall.instance.initialize(
+  texts: const CallTexts(
+    languageCode: 'zh', // 'en', or omit to follow the locale.
+    acceptText: '加入',
+    // ... existing code ...
+  ),
+);
+```
+
+Every label is optional. Unset labels use Chinese for `zh` locales and English
+for other languages. This includes accept/decline/end actions, audio/video
+subtitles, connecting/connected status, outgoing/meeting status, notification
+channel names/description, accessibility labels, and banner error/retry labels.
+Caller names and nonempty ringing handles remain application-provided content.
+Ongoing meeting subtitles follow the state and meeting fields described below.
+
+Priority: banner parameters override that banner only; legacy `initialize`
+`acceptText`/`declineText` override `CallTexts`; other unset labels use defaults.
+Use the same controller for initialization and `CallBannerHost`. Successfully
+reinitializing updates a mounted banner. Failed initialization retains its
+previous text configuration.
+
+With no `languageCode`, initialization resolves notification text using the
+device locale, while the banner follows Flutter's current locale. To keep both
+in the app's chosen language, pass `languageCode: 'zh'` or `'en'` and initialize
+again when the app language changes. Resolved notification labels are persisted
+for native/Worker delivery after process restart. Android native push before the
+first initialization uses localized Android resources. iOS remote APNs alert
+text remains owned by the push payload.
+
+Android CallStyle generates its own system button labels. An explicit language
+or custom action label selects generic notification actions so those labels can
+be honored. Default CallStyle continues to follow the system language.
+
+## Android meeting notifications
+
+For a meeting, set `extra.meeting: true`. Optional `extra.meetingName` and
+`extra.meetingNumber` must be strings when provided. The caller owns these
+values; the plugin does not fetch room metadata.
+
+Ringing retains the invitation title/subtitle. After acceptance the subtitle
+uses `connectingText`; after `setCallConnected` it uses `meetingText`. A supplied
+meeting number is appended with ` · `. A nonempty meeting name uses
+`meetingNamePrefix` (Chinese: `会议名称：`; English: `Meeting name: `) in the
+title. For example: `会议名称：test` / `会议中 · 00123456`. Missing details
+fall back to the existing caller name and state text.
+Ongoing meetings do not reuse `callerHandle`, which may still contain the
+invitation. Both per-call and foreground-service notifications follow this rule.
+
+Use Android `updateCall(callId: id, extra: {...})` to refresh meeting details
+learned after joining. This updates the notification without emitting another
+connected event. Supply meeting numbers as strings to preserve leading zeros.
+
+Changes to Android Kotlin code and resources require rebuilding and reinstalling
+the host APK; Flutter hot reload/restart only updates Dart. Exit an active call
+before replacing the installed app. See the [verification record](doc/IMPLEMENTATION_STATUS.md#text-and-meeting-notifications-2026-11-06).
+
 ## Initialization options
 
 Pass platform-specific settings to `initialize()` as needed. See the matching

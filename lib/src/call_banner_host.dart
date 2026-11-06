@@ -21,8 +21,8 @@ typedef CallBannerBuilder = Widget Function(BuildContext context,
 /// acknowledgment separately.
 class CallBannerHost extends StatefulWidget {
   const CallBannerHost({super.key, required this.child, this.controller,
-    this.enabled, this.builder, this.acceptText = 'Accept', this.declineText = 'Decline',
-    this.audioSubtitle = 'Incoming audio call', this.videoSubtitle = 'Incoming video call',
+    this.enabled, this.builder, this.acceptText, this.declineText,
+    this.audioSubtitle, this.videoSubtitle,
     this.onError});
   /// Application content displayed beneath the banner.
   final Widget child;
@@ -33,13 +33,13 @@ class CallBannerHost extends StatefulWidget {
   /// Optional builder for each ringing call card.
   final CallBannerBuilder? builder;
   /// Localized label for the accept action.
-  final String acceptText;
+  final String? acceptText;
   /// Localized label for the decline action.
-  final String declineText;
+  final String? declineText;
   /// Subtitle used for audio calls when no caller handle is provided.
-  final String audioSubtitle;
+  final String? audioSubtitle;
   /// Subtitle used for video calls when no caller handle is provided.
-  final String videoSubtitle;
+  final String? videoSubtitle;
   /// Receives state restoration and action errors for the banner.
   final void Function(Object, StackTrace)? onError;
   @override
@@ -63,11 +63,17 @@ class _CallBannerHostState extends State<CallBannerHost> with WidgetsBindingObse
     WidgetsBinding.instance.addObserver(this);
     _foreground = WidgetsBinding.instance.lifecycleState == null ||
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    _api.textChanges.addListener(_textChanged);
     _attach();
   }
+  void _textChanged() { if (mounted) setState(() {}); }
   @override
   void didUpdateWidget(CallBannerHost oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      (oldWidget.controller ?? FlutterUnifiedCall.instance).textChanges.removeListener(_textChanged);
+      _api.textChanges.addListener(_textChanged);
+    }
     if (oldWidget.controller != widget.controller || oldWidget.enabled != widget.enabled) {
       unawaited(_subscription?.cancel());
       _subscription = null; _expiry?.cancel(); _calls = const []; _error = null; _busy.clear();
@@ -127,9 +133,14 @@ class _CallBannerHostState extends State<CallBannerHost> with WidgetsBindingObse
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _api.textChanges.removeListener(_textChanged);
     _generation++; _expiry?.cancel(); unawaited(_subscription?.cancel());
     super.dispose();
   }
+  Map<String, String> _labels(BuildContext context) => _api.resolveTexts(
+    Localizations.maybeLocaleOf(context)?.languageCode ??
+        WidgetsBinding.instance.platformDispatcher.locale.languageCode,
+  );
   @override
   Widget build(BuildContext context) {
     if (!_enabled || !_foreground) return widget.child;
@@ -139,8 +150,8 @@ class _CallBannerHostState extends State<CallBannerHost> with WidgetsBindingObse
           child: ConstrainedBox(constraints: BoxConstraints(maxWidth: 560, maxHeight: MediaQuery.sizeOf(context).height * .5),
             child: ListView(shrinkWrap: true, padding: const EdgeInsets.all(12), children: [
               if (_error != null) Material(elevation: 8, borderRadius: BorderRadius.circular(12),
-                child: ListTile(title: const Text('Unable to update call'),
-                  trailing: TextButton(onPressed: () => unawaited(_refresh()), child: const Text('Retry')))),
+                child: ListTile(title: Text(_labels(context)['updateErrorText']!),
+                  trailing: TextButton(onPressed: () => unawaited(_refresh()), child: Text(_labels(context)['retryText']!)))),
               for (final snapshot in _calls) _banner(context, snapshot.config),
             ])),
         ))),
@@ -148,6 +159,8 @@ class _CallBannerHostState extends State<CallBannerHost> with WidgetsBindingObse
   }
   Widget _banner(BuildContext context, IncomingCallConfig config) {
     final busy = _busy.contains(config.callId);
+    final labels = _labels(context);
+    final handle = config.callerHandle;
     void accept() => unawaited(_act(config.callId, true));
     void decline() => unawaited(_act(config.callId, false));
     if (widget.builder case final builder?) return builder(context, config, busy, accept, decline);
@@ -156,11 +169,14 @@ class _CallBannerHostState extends State<CallBannerHost> with WidgetsBindingObse
       child: Padding(padding: const EdgeInsets.all(16), child: Column(mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(config.callerName, style: Theme.of(context).textTheme.titleLarge),
-          Text(config.callerHandle ?? (config.mediaType == CallMediaType.video ? widget.videoSubtitle : widget.audioSubtitle)),
+          Text(handle != null && handle.trim().isNotEmpty ? handle :
+              (config.mediaType == CallMediaType.video
+                ? widget.videoSubtitle ?? labels['videoSubtitle']!
+                : widget.audioSubtitle ?? labels['audioSubtitle']!)),
           const SizedBox(height: 12),
           Wrap(spacing: 12, runSpacing: 8, children: [
-            OutlinedButton(onPressed: busy ? null : decline, child: Text(widget.declineText)),
-            FilledButton(onPressed: busy ? null : accept, child: Text(widget.acceptText)),
+            OutlinedButton(onPressed: busy ? null : decline, child: Text(widget.declineText ?? labels['declineText']!)),
+            FilledButton(onPressed: busy ? null : accept, child: Text(widget.acceptText ?? labels['acceptText']!)),
             if (busy) const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
           ]),
         ])),

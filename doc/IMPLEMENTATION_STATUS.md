@@ -48,6 +48,23 @@ production release candidate until the remaining platform checks below pass.
 - Notification/full-screen/Telecom permissions are reported independently.
 - No promise of guaranteed background launch or notification delivery on iOS/Web.
 
+## Text and meeting notifications (2026-11-06)
+
+- Shared `CallTexts` configuration supplies Chinese/English defaults and partial
+  overrides to notifications, Android full-screen UI and the default banner.
+- Android meeting notifications distinguish acceptance/connecting from media
+  connected, consume caller-owned `meetingName`/`meetingNumber`, and format the
+  ongoing title using `meetingNamePrefix`. String numbers retain leading zeros.
+- Validation passed: 14 Flutter tests, 38 Android native tests, Chrome page/core
+  and Worker push tests, static analysis, iOS Simulator build and the consuming
+  SDK's Android debug APK build. The SDK's eight related tests include a slow
+  room join with an inbox answer and initial room metadata synchronization.
+- Device inspection found a nonempty eight-character string meeting number in
+  the connected snapshot. The installed APK predated the Kotlin changes; the
+  final title/number formatting has not been verified after a full reinstall.
+  Rebuild/reinstall the host APK to validate native changes; hot reload is
+  insufficient. Broader OS/OEM behavior still requires device verification.
+
 ## Verification (2026-11-02)
 
 - Android debug APK compiled successfully.

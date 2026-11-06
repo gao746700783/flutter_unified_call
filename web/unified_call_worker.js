@@ -16,11 +16,11 @@ async function incoming(config) {
   if (!windows.some(client => client.visibilityState === 'visible' && client.url.startsWith(self.registration.scope))) {
     const {value: options} = await UnifiedCallCore.invoke('getOptions');
     await self.registration.showNotification(config.callerName, {
-      body: config.callerHandle || `Incoming ${config.mediaType} call`,
+      body: config.callerHandle || UnifiedCallCore.text(options, config.mediaType === 'video' ? 'videoSubtitle' : 'audioSubtitle'),
       tag: `unified-call-${config.callId}`,
       data: {unifiedCallId: config.callId},
-      actions: [{action: 'accepted', title: options.acceptText || 'Accept'},
-        {action: 'declined', title: options.declineText || 'Decline'}],
+      actions: [{action: 'accepted', title: UnifiedCallCore.text(options, 'acceptText')},
+        {action: 'declined', title: UnifiedCallCore.text(options, 'declineText')}],
       requireInteraction: true,
     });
   }

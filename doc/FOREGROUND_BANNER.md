@@ -15,8 +15,6 @@ background. The default remains native Android UI.
 MaterialApp(
   builder: (context, child) => CallBannerHost(
     controller: FlutterUnifiedCall.instance,
-    acceptText: 'Accept',
-    declineText: 'Decline',
     onError: (error, stack) {
       FlutterError.reportError(FlutterErrorDetails(exception: error, stack: stack));
     },
@@ -25,6 +23,12 @@ MaterialApp(
   // ... existing code ...
 )
 ```
+
+The default banner inherits `initialize(texts: CallTexts(...))` from its
+controller, including error and retry text. Individual banner parameters remain
+optional local overrides. Without a forced `CallTexts.languageCode`, defaults
+follow the current Flutter locale (`zh` uses Chinese; other languages use
+English). See [shared text configuration](../README.md#shared-text-and-language).
 
 The host subscribes to events and queries `getActiveCalls()` on attachment,
 events and foreground resume. Only unexpired ringing calls are shown. Loading

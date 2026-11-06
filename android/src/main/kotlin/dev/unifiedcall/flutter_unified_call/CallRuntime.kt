@@ -66,6 +66,8 @@ internal class CallRuntime private constructor(val context: Context) {
     }
     private fun incomingChannelId(): String = ringtoneName()
         ?.let { "unified_call_incoming_${it}_v2" } ?: "unified_call_incoming_v2"
+    fun text(key: String): String = callText(context, store.options(), key)
+
     fun configure(args: Map<*, *>) {
         val name = args["androidRingtoneName"]
         require(name == null || name is String) { "Ringtone name must be a string" }
@@ -104,8 +106,8 @@ internal class CallRuntime private constructor(val context: Context) {
                 notifications.deleteNotificationChannel("unified_call_incoming")
                 ringtoneName()?.let { notifications.deleteNotificationChannel("unified_call_incoming_$it") }
             } catch (_: Exception) {}
-            notifications.createNotificationChannel(NotificationChannel(incomingChannelId(), store.options().optString("incomingChannelName", "来电通知"), NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Incoming audio and video calls"
+            notifications.createNotificationChannel(NotificationChannel(incomingChannelId(), text("incomingChannelName"), NotificationManager.IMPORTANCE_HIGH).apply {
+                description = text("incomingChannelDescription")
                 setSound(null, null)
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 400, 300, 400)
@@ -113,7 +115,7 @@ internal class CallRuntime private constructor(val context: Context) {
                 setBypassDnd(true)
                 enableLights(true)
             })
-            notifications.createNotificationChannel(NotificationChannel("unified_call_ongoing", store.options().optString("ongoingChannelName", "通话中"), NotificationManager.IMPORTANCE_LOW))
+            notifications.createNotificationChannel(NotificationChannel("unified_call_ongoing", text("ongoingChannelName"), NotificationManager.IMPORTANCE_LOW))
         }
         if (restored) return
         restored = true
@@ -271,22 +273,39 @@ internal class CallRuntime private constructor(val context: Context) {
         )
     }
 
+    private fun isMeeting(config: JSONObject?): Boolean = config?.optBoolean("meeting") == true ||
+        config?.optJSONObject("extra")?.optBoolean("meeting") == true
+
+    private fun notificationTitle(config: JSONObject?, state: String): String {
+        val meetingName = (config?.optJSONObject("extra")?.opt("meetingName") as? String).orEmpty()
+        if (state != "ringing" && isMeeting(config) && meetingName.isNotBlank()) {
+            return text("meetingNamePrefix") + meetingName
+        }
+        return config?.optString("callerName").orEmpty().ifBlank {
+            text(if (isMeeting(config)) "meetingText" else "ongoingText")
+        }
+    }
+
+    private fun ongoingSubtitle(config: JSONObject?, state: String): String {
+        if (isMeeting(config)) {
+            val status = text(if (state == "accepted") "connectingText" else "meetingText")
+            val number = (config?.optJSONObject("extra")?.opt("meetingNumber") as? String).orEmpty()
+            return if (number.isNotBlank()) "$status · $number" else status
+        }
+        return config?.optString("callerHandle").orEmpty().ifBlank { text("ongoingText") }
+    }
+
     fun foregroundNotification(): Notification {
         val id = ongoingTelecomIds().firstOrNull() ?: return Notification.Builder(context)
             .setSmallIcon(android.R.drawable.sym_call_incoming)
-            .setContentTitle("通话中")
+            .setContentTitle(text("ongoingText"))
             .setCategory(Notification.CATEGORY_CALL)
             .setOngoing(true)
             .build()
         val config = store.get(id)?.optJSONObject("config")
-        val isMeeting = config?.optBoolean("meeting") == true ||
-            config?.optJSONObject("extra")?.optBoolean("meeting") == true
-        val handle = config?.optString("callerHandle").orEmpty()
-        val defaultOngoing = if (isMeeting) "会议中" else "通话中"
-        val ongoingText = if (handle.isNotBlank() && !handle.startsWith("邀请你") && !handle.startsWith("正在呼叫")) handle else defaultOngoing
-        val callerName = config?.optString("callerName").orEmpty().ifEmpty {
-            defaultOngoing
-        }
+        val state = store.get(id)?.optString("state").orEmpty()
+        val ongoingText = ongoingSubtitle(config, state)
+        val callerName = notificationTitle(config, state)
         val end = action(id, "ended")
         val builder = if (Build.VERSION.SDK_INT >= 26) {
             Notification.Builder(context, "unified_call_ongoing")
@@ -306,8 +325,8 @@ internal class CallRuntime private constructor(val context: Context) {
                 launchIntent(id),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             ))
-        val hangupText = store.options().optString("hangupText", "挂断")
-        if (Build.VERSION.SDK_INT >= 31) {
+        val hangupText = text("hangupText")
+        if (Build.VERSION.SDK_INT >= 31 && !store.options().optBoolean("customCallActions")) {
             val person = Person.Builder().setName(callerName).build()
             builder.setStyle(Notification.CallStyle.forOngoingCall(person, end))
         } else {
@@ -319,36 +338,36 @@ internal class CallRuntime private constructor(val context: Context) {
         val config = call.getJSONObject("config")
         val id = config.getString("callId")
         val ringing = call.getString("state") == "ringing"
-        val isMeeting = config.optBoolean("meeting") || config.optJSONObject("extra")?.optBoolean("meeting") == true
+        val isMeeting = isMeeting(config)
         val isOutgoing = config.optBoolean("outgoing", false) || config.optJSONObject("extra")?.optBoolean("outgoing") == true
         val handle = config.optString("callerHandle").orEmpty()
-        val defaultOngoing = if (isMeeting) "会议中" else "通话中"
-        val defaultRinging = if (isOutgoing) "正在呼叫"
-            else if (isMeeting) "邀请你加入会议"
-            else if (config.optString("mediaType", "audio") == "voice" || config.optString("mediaType") == "audio") "邀请你语音通话"
-            else "邀请你视频通话"
+        val defaultRinging = if (isOutgoing) text("outgoingText")
+            else if (isMeeting) text("meetingInvitationText")
+            else if (config.optString("mediaType") == "video") text("videoSubtitle")
+            else text("audioSubtitle")
         val contentText = if (ringing) {
             if (handle.isNotBlank()) handle else defaultRinging
         } else {
-            if (handle.isNotBlank() && !handle.startsWith("邀请你") && !handle.startsWith("正在呼叫")) handle else defaultOngoing
+            ongoingSubtitle(config, call.getString("state"))
         }
+        val callerName = notificationTitle(config, call.getString("state"))
         val open = PendingIntent.getActivity(context, 0, launchIntent(id), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(context, if (ringing && !isOutgoing) incomingChannelId() else "unified_call_ongoing") else Notification.Builder(context)
-        builder.setSmallIcon(android.R.drawable.sym_call_incoming).setContentTitle(config.getString("callerName"))
+        builder.setSmallIcon(android.R.drawable.sym_call_incoming).setContentTitle(callerName)
             .setContentText(contentText)
             .setCategory(Notification.CATEGORY_CALL).setOngoing(true).setOnlyAlertOnce(!ringing)
             .setContentIntent(open).setVisibility(if (ringing && !isOutgoing) Notification.VISIBILITY_PUBLIC else Notification.VISIBILITY_PRIVATE)
         val decline = action(id, if (ringing && !isOutgoing) "declined" else "ended")
         val accept = action(id, "accepted")
-        val useCallStyle = Build.VERSION.SDK_INT >= 31 &&
+        val useCallStyle = Build.VERSION.SDK_INT >= 31 && !store.options().optBoolean("customCallActions") &&
             ((ringing && !isOutgoing && (Build.VERSION.SDK_INT < 34 || notifications.canUseFullScreenIntent())) || (!ringing) || (ringing && isOutgoing))
         if (useCallStyle) {
-            val person = Person.Builder().setName(config.getString("callerName")).build()
+            val person = Person.Builder().setName(callerName).build()
             builder.setStyle(if (ringing && !isOutgoing) Notification.CallStyle.forIncomingCall(person, decline, accept)
                 else Notification.CallStyle.forOngoingCall(person, decline))
         } else {
-            val declineText = if (ringing && !isOutgoing) store.options().optString("declineText", "拒绝") else store.options().optString("hangupText", "挂断")
-            val acceptText = store.options().optString("acceptText", "接听")
+            val declineText = if (ringing && !isOutgoing) text("declineText") else text("hangupText")
+            val acceptText = text("acceptText")
             builder.addAction(Notification.Action.Builder(null, declineText, decline).build())
             if (ringing && !isOutgoing) builder.addAction(Notification.Action.Builder(null, acceptText, accept).build())
             @Suppress("DEPRECATION")
@@ -374,9 +393,10 @@ internal class CallRuntime private constructor(val context: Context) {
             false
         } else if (useCallStyle) postCallStyleWithFallback(notification, {
             builder.setStyle(null)
-            val declineAction = Notification.Action.Builder(null, store.options().optString("declineText", "Decline"), decline).build()
-            val acceptAction = Notification.Action.Builder(null, store.options().optString("acceptText", "Accept"), accept).build()
-            builder.setActions(declineAction, acceptAction)
+            val declineAction = Notification.Action.Builder(null, text(if (ringing && !isOutgoing) "declineText" else "hangupText"), decline).build()
+            val acceptAction = Notification.Action.Builder(null, text("acceptText"), accept).build()
+            if (ringing && !isOutgoing) builder.setActions(declineAction, acceptAction)
+            else builder.setActions(declineAction)
             builder.build().apply { flags = flags or Notification.FLAG_INSISTENT }
         }) { notifications.notify(id, 1, it) }
         else { notifications.notify(id, 1, notification); false }

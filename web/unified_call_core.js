@@ -115,5 +115,17 @@
       tx.onerror = () => { /* onabort reports the failed transaction. */ };
     });
   }
-  scope.UnifiedCallCore = {invoke};
+  // Shared by the page and Worker, including push delivery without Dart.
+  function text(options, key) {
+    if (typeof options[key] === 'string') return options[key];
+    const chinese = (scope.navigator?.language || 'en').toLowerCase().startsWith('zh');
+    const defaults = {
+      acceptText: ['Accept', '接听'], declineText: ['Decline', '拒绝'],
+      audioSubtitle: ['Incoming audio call', '语音来电'],
+      videoSubtitle: ['Incoming video call', '视频来电'],
+    };
+    if (!Object.hasOwn(defaults, key)) throw new Error(`Unknown call text: ${key}`);
+    return defaults[key][chinese ? 1 : 0];
+  }
+  scope.UnifiedCallCore = {invoke, text};
 })(globalThis);

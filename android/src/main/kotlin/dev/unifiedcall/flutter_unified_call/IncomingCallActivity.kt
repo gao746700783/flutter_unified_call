@@ -82,11 +82,10 @@ class IncomingCallActivity : Activity() {
         if (state == "ended") return finish()
 
         val config = call.optJSONObject("config") ?: return finish()
-        val callerName = config.optString("callerName").ifBlank { "Unknown caller" }
+        val callerName = config.optString("callerName").ifBlank { runtime.text("unknownCallerText") }
         val callerHandle = config.optString("callerHandle")
         val isVideo = config.optString("mediaType") == "video"
         val isRinging = state == "ringing"
-        val chinese = resources.configuration.locales[0].language == "zh"
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -99,8 +98,8 @@ class IncomingCallActivity : Activity() {
         }
 
         content.addView(textView(
-            if (isRinging) localized(chinese, "来电", "INCOMING CALL")
-            else localized(chinese, "通话中", "CALL IN PROGRESS"),
+            if (isRinging) runtime.text("incomingTitle")
+            else runtime.text("ongoingText"),
             12f,
             Color.rgb(177, 192, 216),
             bold = true,
@@ -115,10 +114,10 @@ class IncomingCallActivity : Activity() {
         content.addView(spacer(10))
         content.addView(textView(
             when {
-                state == "connected" -> localized(chinese, "已接通", "Connected")
-                state == "accepted" -> localized(chinese, "正在接通", "Connecting")
-                isVideo -> localized(chinese, "视频来电", "Incoming video call")
-                else -> localized(chinese, "语音来电", "Incoming audio call")
+                state == "connected" -> runtime.text("connectedText")
+                state == "accepted" -> runtime.text("connectingText")
+                isVideo -> runtime.text("videoSubtitle")
+                else -> runtime.text("audioSubtitle")
             },
             16f,
             Color.rgb(190, 202, 222),
@@ -138,9 +137,8 @@ class IncomingCallActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
         }
-        val options = runtime.store.options()
-        val declineText = callActionLabel(options.optString("declineText"), "Decline", chinese, "挂断", "Decline")
-        val acceptText = callActionLabel(options.optString("acceptText"), "Accept", chinese, "接听", "Accept")
+        val declineText = runtime.text("declineText")
+        val acceptText = runtime.text("acceptText")
         if (isRinging) {
             actions.addView(actionButton(
                 false,
@@ -158,7 +156,7 @@ class IncomingCallActivity : Activity() {
         } else {
             actions.addView(actionButton(
                 false,
-                localized(chinese, "结束通话", "End call"),
+                runtime.text("hangupText"),
                 Color.rgb(226, 72, 88),
             ) {
                 runtime.act(id, "ended", "localEnded")
@@ -193,7 +191,7 @@ class IncomingCallActivity : Activity() {
         ).apply { shape = GradientDrawable.OVAL }
         layoutParams = LinearLayout.LayoutParams(dp(104), dp(104))
         elevation = dp(8).toFloat()
-        contentDescription = localized(resources.configuration.locales[0].language == "zh", "来电者头像", "Caller avatar")
+        contentDescription = runtime.text("callerAvatarText")
     }
 
     private fun actionButton(
@@ -262,11 +260,6 @@ class IncomingCallActivity : Activity() {
     )
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
-
-    private fun localized(chinese: Boolean, zh: String, en: String) = if (chinese) zh else en
-
-    private fun callActionLabel(value: String, default: String, chinese: Boolean, zh: String, en: String): String =
-        if (value.isBlank() || value == default) localized(chinese, zh, en) else value
 
     private class PhoneIconDrawable(private val accepting: Boolean) : android.graphics.drawable.Drawable() {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; style = Paint.Style.FILL }

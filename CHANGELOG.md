@@ -1,3 +1,11 @@
+## Unreleased
+
+- Flutter/Android/iOS/Web: 统一 `CallTexts` 配置，为通知、Android 锁屏页和 banner 提供中英文默认文案及自定义覆盖，兼容原有按钮文本参数。
+- Flutter: banner 继承同一 controller 的初始化文案，支持配置更新及错误、重试文案本地化；初始化失败时保留原配置。
+- Android: 原生免引擎入口支持中英文资源回退；自定义按钮文案或显式语言使用普通通知 action，避免系统 CallStyle 覆盖配置。
+- Android: 会议通知按接通中/会议中状态显示，支持调用方传入会议名称和字符串会议号，并保留号码前导零；不再沿用邀请副标题。
+- Android: 新增可本地化、自定义的 `meetingNamePrefix`，默认格式为“会议名称：名称” / “会议中 · 会议号”。
+
 ## 0.1.1
 
 - Android: 合并通话通知状态，并优化通知栏接听后的前后台跳转。

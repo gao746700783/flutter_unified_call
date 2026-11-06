@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="unified_call_acceptText">Accept</string>
+    <string name="unified_call_declineText">Decline</string>
+    <string name="unified_call_hangupText">End call</string>
+    <string name="unified_call_audioSubtitle">Incoming audio call</string>
+    <string name="unified_call_videoSubtitle">Incoming video call</string>
+    <string name="unified_call_incomingTitle">Incoming call</string>
+    <string name="unified_call_ongoingText">Call in progress</string>
+    <string name="unified_call_connectingText">Connecting</string>
+    <string name="unified_call_connectedText">Connected</string>
+    <string name="unified_call_outgoingText">Calling</string>
+    <string name="unified_call_meetingText">Meeting in progress</string>
+    <string name="unified_call_meetingInvitationText">Invitation to join a meeting</string>
+    <string name="unified_call_unknownCallerText">Unknown caller</string>
+    <string name="unified_call_callerAvatarText">Caller avatar</string>
+    <string name="unified_call_incomingChannelName">Incoming calls</string>
+    <string name="unified_call_ongoingChannelName">Ongoing calls</string>
+    <string name="unified_call_incomingChannelDescription">Incoming audio and video calls</string>
+    <string name="unified_call_updateErrorText">Unable to update call</string>
+    <string name="unified_call_retryText">Retry</string>
+    <string name="unified_call_meetingNamePrefix">"Meeting name: "</string>
+</resources>

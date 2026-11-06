@@ -100,6 +100,13 @@ lock-screen interaction, process death or Doze behavior.
 
 ## Atomic persistence (2026-11-03)
 
+`unified_call_v1.json` is created at runtime under `Context.filesDir`; it is not
+a packaged JSON asset or an external dependency. It contains call snapshots,
+unacknowledged events and initialization options, including resolved UI text.
+The first runtime reads it before a Flutter engine or Dart listener is required.
+Do not delete it as part of a text/notification upgrade: doing so also removes
+the event inbox and call recovery state.
+
 Android state now uses AtomicFile. A write failure restores the last committed
 in-memory snapshot and does not dispatch the attempted event. Failed event
 acknowledgment preserves the inbox for retry. Atomic backups are recovered before

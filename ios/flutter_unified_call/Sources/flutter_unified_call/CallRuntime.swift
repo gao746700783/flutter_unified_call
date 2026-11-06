@@ -60,8 +60,8 @@ final class CallRuntime {
             }
             try store.configure(options)
             ringer.reset()
-            let accept = UNNotificationAction(identifier: "accepted", title: options["acceptText"] as? String ?? "Accept", options: [.foreground])
-            let decline = UNNotificationAction(identifier: "declined", title: options["declineText"] as? String ?? "Decline", options: [])
+            let accept = UNNotificationAction(identifier: "accepted", title: text("acceptText"), options: [.foreground])
+            let decline = UNNotificationAction(identifier: "declined", title: text("declineText"), options: [])
             let category = UNNotificationCategory(identifier: Self.category, actions: [accept, decline], intentIdentifiers: [], options: [])
             center.getNotificationCategories { [weak self] existing in
                 DispatchQueue.main.async {
@@ -105,6 +105,19 @@ final class CallRuntime {
             try postNotification(config, completion: completion)
         } catch { completion(error) }
     }
+    private func text(_ key: String) -> String {
+        if let value = store.options[key] as? String { return value }
+        let chinese = Locale.preferredLanguages.first?.hasPrefix("zh") == true
+        switch key {
+        case "acceptText": return chinese ? "接听" : "Accept"
+        case "declineText": return chinese ? "拒绝" : "Decline"
+        case "audioSubtitle": return chinese ? "语音来电" : "Incoming audio call"
+        case "videoSubtitle": return chinese ? "视频来电" : "Incoming video call"
+        case "incomingTitle": return chinese ? "来电" : "Incoming call"
+        default: preconditionFailure("Unknown call text: \(key)")
+        }
+    }
+
     private func showBackgroundCalls() {
         let now = Date().timeIntervalSince1970 * 1000
         for call in store.allCalls {
@@ -135,8 +148,9 @@ final class CallRuntime {
     }
     func notificationContent(_ config: [String: Any]) throws -> UNMutableNotificationContent {
         let content = UNMutableNotificationContent()
-        content.title = config["callerName"] as? String ?? "Incoming call"
-        content.body = config["callerHandle"] as? String ?? "Incoming \(config["mediaType"] as? String ?? "audio") call"
+        content.title = config["callerName"] as? String ?? text("incomingTitle")
+        let handle = config["callerHandle"] as? String ?? ""
+        content.body = handle.isEmpty ? text(config["mediaType"] as? String == "video" ? "videoSubtitle" : "audioSubtitle") : handle
         content.categoryIdentifier = Self.category
         let payload = try JSONSerialization.data(withJSONObject: config)
         guard let payloadString = String(data: payload, encoding: .utf8) else { throw CallStoreError.invalidPayload }

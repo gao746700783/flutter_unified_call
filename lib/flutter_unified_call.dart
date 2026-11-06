@@ -1,5 +1,9 @@
+import 'dart:ui' show PlatformDispatcher;
+import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier;
 import 'flutter_unified_call_platform_interface.dart';
+import 'src/call_texts.dart';
 import 'src/models.dart';
+export 'src/call_texts.dart';
 export 'src/models.dart';
 export 'src/call_banner_host.dart';
 
@@ -16,6 +20,21 @@ class FlutterUnifiedCall {
 
   /// The default controller used by the package example and banner UI.
   static final instance = FlutterUnifiedCall();
+  CallTexts _texts = const CallTexts();
+  final _textChanges = ValueNotifier<int>(0);
+  String? _acceptText;
+  String? _declineText;
+
+  /// Notifies banners after text configuration is successfully applied.
+  ValueListenable<int> get textChanges => _textChanges;
+
+  /// Resolves shared labels, including legacy initialize action overrides.
+  Map<String, String> resolveTexts(String locale) => {
+    ..._texts.resolve(locale),
+    if (_acceptText != null) 'acceptText': _acceptText!,
+    if (_declineText != null) 'declineText': _declineText!,
+  };
+
   FlutterUnifiedCallPlatform get _platform => FlutterUnifiedCallPlatform.instance;
 
   /// Events delivered while this controller is listening.
@@ -30,11 +49,14 @@ class FlutterUnifiedCall {
   /// in response to a deliberate user action. Configure [webUseServiceWorker]
   /// only after installing the package's host-owned Worker adapter.
   Future<void> initialize({
+    /// Shared UI labels. Legacy action parameters take precedence.
+    CallTexts texts = const CallTexts(),
+
     /// Label used for the accept action in platform UI and the default banner.
-    String acceptText = 'Accept',
+    String? acceptText,
 
     /// Label used for the decline action in platform UI and the default banner.
-    String declineText = 'Decline',
+    String? declineText,
 
     /// Enables Android self-managed Telecom. Set to false to use notification
     /// fallback UI instead.
@@ -74,13 +96,24 @@ class FlutterUnifiedCall {
     bool androidForegroundBanner = false,
   }) async {
     await _platform.invoke('initialize', {
-      'acceptText': acceptText, 'declineText': declineText, 'enableTelecom': enableTelecom,
+      ...texts.resolve(PlatformDispatcher.instance.locale.languageCode),
+      if (acceptText != null) 'acceptText': acceptText,
+      if (declineText != null) 'declineText': declineText,
+      // Android CallStyle owns its button labels; custom labels use actions.
+      'customCallActions': texts.languageCode != null || acceptText != null ||
+          declineText != null || texts.acceptText != null ||
+          texts.declineText != null || texts.hangupText != null,
+      'enableTelecom': enableTelecom,
       'iosTimeSensitive': iosTimeSensitive, 'iosEnableRingtone': iosEnableRingtone,
       'iosRingtoneFileName': iosRingtoneFileName, 'androidRingtoneName': androidRingtoneName,
       'webRingtoneUrl': webRingtoneUrl, 'webEnableRingtone': webEnableRingtone,
       'webUseServiceWorker': webUseServiceWorker, 'webLaunchUrl': webLaunchUrl,
       'androidForegroundBanner': androidForegroundBanner,
     });
+    _acceptText = acceptText;
+    _declineText = declineText;
+    _texts = texts;
+    _textChanges.value++;
   }
 
   /// Unlocks Web Audio playback from a user gesture after [initialize].
