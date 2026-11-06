@@ -7,7 +7,11 @@ internal open class CallConnection(protected val runtime: CallRuntime, protected
     override fun onAnswer() { setAudioModeIsVoip(true); runtime.act(id, "accepted") }
     override fun onAnswer(videoState: Int) { onAnswer() }
     override fun onReject() { runtime.act(id, "declined", "declined") }
-    override fun onDisconnect() { runtime.act(id, "ended", "localEnded") }
+    override fun onDisconnect() {
+        val call = runtime.store.get(id)
+        val cancelling = call?.getJSONObject("config")?.isOutgoingCall() == true && call.optString("state") != "connected"
+        runtime.act(id, "ended", if (cancelling) "cancelled" else "localEnded")
+    }
     override fun onAbort() { runtime.act(id, "ended", "failed") }
     override fun onSilence() {
         super.onSilence()

@@ -90,7 +90,12 @@ class FlutterUnifiedCallWeb extends FlutterUnifiedCallPlatform {
     if (generation != _generation) return;
     _expiry?.cancel();
     final calls = result['value'] as List? ?? const [];
-    final expiries = calls.where((c) => (c as Map)['state'] == 'ringing')
+    final expiries = calls.where((value) {
+      final call = value as Map;
+      final config = call['config'] as Map;
+      return call['state'] == 'ringing' || (config['direction'] == 'outgoing' &&
+          (call['state'] == 'dialing' || call['state'] == 'accepted'));
+    })
         .map((c) => ((c as Map)['config'] as Map)['expiresAt'] as int).toList()..sort();
     if (expiries.isEmpty) return;
     final delay = DateTime.fromMillisecondsSinceEpoch(expiries.first).difference(DateTime.now());

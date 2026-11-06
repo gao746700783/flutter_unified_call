@@ -93,7 +93,7 @@ class _CallBannerHostState extends State<CallBannerHost> with WidgetsBindingObse
       final calls = await _api.getActiveCalls();
       if (!mounted || generation != _generation) return;
       final now = DateTime.now();
-      final ringing = calls.where((c) => c.state == CallState.ringing && c.config.expiresAt.isAfter(now)).toList()
+      final ringing = calls.where((c) => c.state == CallState.ringing && c.config.direction == CallDirection.incoming && c.config.expiresAt.isAfter(now)).toList()
         ..sort((a, b) => a.config.expiresAt.compareTo(b.config.expiresAt));
       _expiry?.cancel();
       setState(() { _calls = ringing; _error = null; });
@@ -170,13 +170,14 @@ class _CallBannerHostState extends State<CallBannerHost> with WidgetsBindingObse
         crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(config.callerName, style: Theme.of(context).textTheme.titleLarge),
           Text(handle != null && handle.trim().isNotEmpty ? handle :
+              config.kind == CallKind.meeting ? labels['meetingInvitationText']! :
               (config.mediaType == CallMediaType.video
                 ? widget.videoSubtitle ?? labels['videoSubtitle']!
                 : widget.audioSubtitle ?? labels['audioSubtitle']!)),
           const SizedBox(height: 12),
           Wrap(spacing: 12, runSpacing: 8, children: [
             OutlinedButton(onPressed: busy ? null : decline, child: Text(widget.declineText ?? labels['declineText']!)),
-            FilledButton(onPressed: busy ? null : accept, child: Text(widget.acceptText ?? labels['acceptText']!)),
+            FilledButton(onPressed: busy ? null : accept, child: Text(widget.acceptText ?? labels[config.kind == CallKind.meeting ? 'joinMeetingText' : 'acceptText']!)),
             if (busy) const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
           ]),
         ])),

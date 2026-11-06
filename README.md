@@ -149,6 +149,14 @@ Android CallStyle generates its own system button labels. An explicit language
 or custom action label selects generic notification actions so those labels can
 be honored. Default CallStyle continues to follow the system language.
 
+## Outgoing calls and meetings
+
+Use `startOutgoingCall(OutgoingCallConfig(...))` for a local call or a meeting
+being created/joined. `CallKind.pointToPoint` starts dialing; `CallKind.meeting`
+starts joining. Meetings only offer notification-body navigation, with leaving
+and ending managed by the SDK. Inviting participants does not create a second
+presentation. See the [complete scene and lifecycle guide](doc/OUTGOING_CALLS.md).
+
 ## Android meeting notifications
 
 For a meeting, set `extra.meeting: true`. Optional `extra.meetingName` and
@@ -156,7 +164,7 @@ For a meeting, set `extra.meeting: true`. Optional `extra.meetingName` and
 values; the plugin does not fetch room metadata.
 
 Ringing retains the invitation title/subtitle. After acceptance the subtitle
-uses `connectingText`; after `setCallConnected` it uses `meetingText`. A supplied
+uses `joiningMeetingText`; after `setCallConnected` it uses `meetingText`. A supplied
 meeting number is appended with ` · `. A nonempty meeting name uses
 `meetingNamePrefix` (Chinese: `会议名称：`; English: `Meeting name: `) in the
 title. For example: `会议名称：test` / `会议中 · 00123456`. Missing details

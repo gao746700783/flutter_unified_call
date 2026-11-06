@@ -1,5 +1,7 @@
 package dev.unifiedcall.flutter_unified_call
 
+import android.content.ComponentName
+import android.content.ContextWrapper
 import android.content.Context
 import android.content.Intent
 import android.telecom.Connection
@@ -49,8 +51,46 @@ class CallForegroundServiceTest {
         val controller = Robolectric.buildService(CallForegroundService::class.java).create()
         val service = controller.get()
         service.onStartCommand(Intent(), 0, 1)
+        assertEquals("unified_call_ongoing", runtime.foregroundNotification().channelId)
         assertTrue(shadowOf(service).isStoppedBySelf)
         assertTrue(runtime.ongoingTelecomIds().isEmpty())
         controller.destroy()
     }
+    @Test fun outgoingNotificationSurvivesServiceStartFailure() {
+        val app = RuntimeEnvironment.getApplication()
+        val failingContext = object : ContextWrapper(app) {
+            override fun startForegroundService(intent: Intent): ComponentName? {
+                throw IllegalStateException("Simulated foreground service restriction")
+            }
+        }
+        val failedRuntime = CallRuntime::class.java.getDeclaredConstructor(Context::class.java)
+            .apply { isAccessible = true }.newInstance(failingContext)
+        failedRuntime.initialize()
+        failedRuntime.configure(mapOf("enableTelecom" to false))
+        failedRuntime.outgoing(mapOf("callId" to "out", "callerName" to "Peer", "mediaType" to "audio",
+            "expiresAt" to System.currentTimeMillis() + 60000, "extra" to emptyMap<String, Any>()))
+        failedRuntime.connections["out"] = object : Connection() {}
+        failedRuntime.showOutgoingUi("out")
+        failedRuntime.updateForegroundService()
+        assertNotNull(shadowOf(failedRuntime.notifications).getNotification("out", 1))
+    }
+    @Test fun notificationSuppressionRequiresSuccessfulPromotionAndRestoresOnFailure() {
+        add("one")
+        assertNotNull(shadowOf(runtime.notifications).getNotification("one", 1))
+        val controller = Robolectric.buildService(CallForegroundService::class.java).create()
+        controller.get().onStartCommand(Intent(), 0, 1)
+        assertNull(shadowOf(runtime.notifications).getNotification("one", 1))
+        runtime.reportForegroundError(IllegalStateException("Simulated promotion failure"))
+        assertNotNull(shadowOf(runtime.notifications).getNotification("one", 1))
+        controller.destroy()
+    }
+    @Test fun serviceDestructionRestoresOngoingNotification() {
+        add("one")
+        val controller = Robolectric.buildService(CallForegroundService::class.java).create()
+        controller.get().onStartCommand(Intent(), 0, 1)
+        assertNull(shadowOf(runtime.notifications).getNotification("one", 1))
+        controller.destroy()
+        assertNotNull(shadowOf(runtime.notifications).getNotification("one", 1))
+    }
+
 }

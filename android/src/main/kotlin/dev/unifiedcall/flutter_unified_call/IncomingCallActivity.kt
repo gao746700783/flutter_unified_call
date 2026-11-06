@@ -83,7 +83,7 @@ class IncomingCallActivity : Activity() {
 
         val config = call.optJSONObject("config") ?: return finish()
         val callerName = config.optString("callerName").ifBlank { runtime.text("unknownCallerText") }
-        val callerHandle = config.optString("callerHandle")
+        val callerHandle = (config.opt("callerHandle") as? String).orEmpty()
         val isVideo = config.optString("mediaType") == "video"
         val isRinging = state == "ringing"
 
@@ -114,15 +114,15 @@ class IncomingCallActivity : Activity() {
         content.addView(spacer(10))
         content.addView(textView(
             when {
-                state == "connected" -> runtime.text("connectedText")
-                state == "accepted" -> runtime.text("connectingText")
+                state == "connected" -> runtime.text(if (config.isMeetingCall()) "meetingText" else "connectedText")
+                state == "accepted" -> runtime.text(if (config.isMeetingCall()) "joiningMeetingText" else "connectingText")
                 isVideo -> runtime.text("videoSubtitle")
                 else -> runtime.text("audioSubtitle")
             },
             16f,
             Color.rgb(190, 202, 222),
         ))
-        if (callerHandle.isNotBlank()) {
+        if (isRinging && callerHandle.isNotBlank()) {
             content.addView(spacer(8))
             content.addView(textView(callerHandle, 15f, Color.rgb(153, 169, 195)))
         }
@@ -138,7 +138,7 @@ class IncomingCallActivity : Activity() {
             gravity = Gravity.CENTER
         }
         val declineText = runtime.text("declineText")
-        val acceptText = runtime.text("acceptText")
+        val acceptText = runtime.text(if (config.isMeetingCall()) "joinMeetingText" else "acceptText")
         if (isRinging) {
             actions.addView(actionButton(
                 false,
@@ -153,7 +153,7 @@ class IncomingCallActivity : Activity() {
                 acceptText,
                 Color.rgb(39, 185, 120),
             ) { accept(id) }, weightedActionParams())
-        } else {
+        } else if (!config.isMeetingCall()) {
             actions.addView(actionButton(
                 false,
                 runtime.text("hangupText"),

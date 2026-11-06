@@ -7,6 +7,7 @@ import org.json.JSONObject
 internal fun callText(context: Context, options: JSONObject, key: String): String {
     val override = options.opt(key)
     if (override is String) return override
+    if (key == "joinMeetingText" && options.opt("acceptText") is String) return options.getString("acceptText")
     val resource = when (key) {
         "acceptText" -> R.string.unified_call_acceptText
         "declineText" -> R.string.unified_call_declineText
@@ -17,6 +18,9 @@ internal fun callText(context: Context, options: JSONObject, key: String): Strin
         "ongoingText" -> R.string.unified_call_ongoingText
         "connectingText" -> R.string.unified_call_connectingText
         "connectedText" -> R.string.unified_call_connectedText
+        "cancelCallText" -> R.string.unified_call_cancelCallText
+        "joinMeetingText" -> R.string.unified_call_joinMeetingText
+        "joiningMeetingText" -> R.string.unified_call_joiningMeetingText
         "outgoingText" -> R.string.unified_call_outgoingText
         "meetingText" -> R.string.unified_call_meetingText
         "meetingNamePrefix" -> R.string.unified_call_meetingNamePrefix

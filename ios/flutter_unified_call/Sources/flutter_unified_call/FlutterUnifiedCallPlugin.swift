@@ -58,6 +58,12 @@ public class FlutterUnifiedCallPlugin: NSObject, FlutterPlugin, FlutterStreamHan
             switch call.method {
             case "initialize": runtime.initialize(args) { error in result(error.map(self.failure)) }
             case "showIncomingCall": runtime.incoming(args) { error in result(error.map(self.failure)) }
+            case "startOutgoingCall": try runtime.startOutgoing(args); result(nil)
+            case "updateCall":
+                guard let id = args["callId"] as? String, !id.isEmpty else { throw CallStoreError.invalidPayload }
+                try runtime.store.update(id, callerName: args["callerName"] as? String,
+                    callerHandle: args["callerHandle"] as? String, extra: args["extra"] as? [String: Any])
+                result(nil)
             case "getPendingEvents": try runtime.reconcile(); result(runtime.store.events)
             case "getActiveCalls":
                 try runtime.reconcile()
@@ -65,11 +71,11 @@ public class FlutterUnifiedCallPlugin: NSObject, FlutterPlugin, FlutterStreamHan
             case "acknowledgeEvent":
                 guard let id = args["eventId"] as? String else { throw CallStoreError.invalidPayload }
                 try runtime.store.acknowledge(id); result(nil)
-            case "acceptCall", "declineCall", "setCallConnected", "endCall":
+            case "acceptCall", "declineCall", "setCallConnecting", "setCallConnected", "endCall":
                 guard let id = args["callId"] as? String, !id.isEmpty else { throw CallStoreError.invalidPayload }
                 let reason = args["reason"] as? String ?? "localEnded"
                 let action = call.method == "acceptCall" ? "accepted" : call.method == "declineCall" ? "declined" :
-                    call.method == "setCallConnected" ? "connected" : reason == "missed" ? "missed" : "ended"
+                    call.method == "setCallConnecting" ? "connecting" : call.method == "setCallConnected" ? "connected" : reason == "missed" ? "missed" : "ended"
                 try runtime.act(id, action: action, reason: action == "declined" ? "declined" : ["ended", "missed"].contains(action) ? reason : nil)
                 result(nil)
             case "endAllCalls":

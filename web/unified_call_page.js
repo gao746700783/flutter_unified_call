@@ -31,7 +31,7 @@
       if (notifications.has(id) || notificationFailures.has(id)) continue;
       try {
         const notification = new Notification(config.callerName, {
-          body: config.callerHandle || UnifiedCallCore.text(options, config.mediaType === 'video' ? 'videoSubtitle' : 'audioSubtitle'),
+          body: config.callerHandle || UnifiedCallCore.text(options, UnifiedCallCore.isMeeting(config) ? 'meetingInvitationText' : config.mediaType === 'video' ? 'videoSubtitle' : 'audioSubtitle'),
           tag: 'unified-call-' + id,
           requireInteraction: true,
         });

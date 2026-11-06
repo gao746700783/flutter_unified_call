@@ -11,6 +11,8 @@ flow and API overview. Use these guides for platform integration details.
 
 ## UI and audio
 
+- [Outgoing calls, meetings, state and control semantics](OUTGOING_CALLS.md)
+
 - [Foreground call banner and iOS ringtone](FOREGROUND_BANNER.md)
 - [Android Telecom audio endpoints](ANDROID_AUDIO.md)
 

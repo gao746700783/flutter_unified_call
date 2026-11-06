@@ -111,6 +111,33 @@ const assert = require('node:assert/strict');
     assert.equal(await a.evaluate(() => window.__callNotices.at(-1).options.body), 'Voice invitation');
     await a.evaluate(() => UnifiedCallPage.invoke('declineCall', {callId: 'hidden-page'}));
     assert.equal(await a.evaluate(() => window.__callNotices.at(-1).closed), true);
+    const outgoing = {...call, callId: 'outgoing', direction: 'outgoing', kind: 'pointToPoint', expiresAt: Date.now() + 30000};
+    const started = await run(a, 'startOutgoingCall', outgoing);
+    assert.equal(started.events[0].type, 'started');
+    assert.equal((await run(b, 'getActiveCalls')).value.find(c => c.config.callId === 'outgoing').state, 'dialing');
+    await run(a, 'setCallConnecting', {callId: 'outgoing'});
+    assert.equal((await run(a, 'setCallConnected', {callId: 'outgoing'})).events[0].type, 'connected');
+    assert.equal((await run(a, 'startOutgoingCall', outgoing)).events.length, 0);
+    const localMeeting = {...outgoing, callId: 'local-meeting', kind: 'meeting'};
+    await run(a, 'startOutgoingCall', localMeeting);
+    await run(a, 'updateCall', {callId: 'local-meeting', callerName: 'Weekly', extra: {meetingNumber: '001234'}});
+    const storedMeeting = (await run(b, 'getActiveCalls')).value.find(c => c.config.callId === 'local-meeting');
+    assert.equal(storedMeeting.state, 'accepted');
+    assert.equal(storedMeeting.config.callerName, 'Weekly');
+    assert.equal(storedMeeting.config.extra.meetingNumber, '001234');
+    const expiryResult = await a.evaluate(async () => {
+      const originalNow = Date.now;
+      const now = originalNow();
+      try {
+        await UnifiedCallCore.invoke('startOutgoingCall', {callId: 'expiring-out', callerName: 'Peer', mediaType: 'audio', expiresAt: now + 1000, extra: {}});
+        await UnifiedCallCore.invoke('startOutgoingCall', {callId: 'expiring-meeting', callerName: 'Weekly', kind: 'meeting', mediaType: 'audio', expiresAt: now + 1000, extra: {}});
+        Date.now = () => now + 2000;
+        await UnifiedCallCore.invoke('getActiveCalls');
+        return (await UnifiedCallCore.invoke('getPendingEvents')).value.filter(e => ['expiring-out', 'expiring-meeting'].includes(e.call.callId) && e.type === 'ended');
+      } finally { Date.now = originalNow; }
+    });
+    assert.deepEqual(expiryResult.map(e => [e.type, e.reason]), [['ended', 'unanswered'], ['ended', 'failed']]);
+    assert.equal(await a.evaluate(() => window.__callNotices.some(n => n.options.tag.includes('outgoing') || n.options.tag.includes('local-meeting'))), false);
     console.log('PASS: browser IndexedDB concurrency, lifecycle, replay/ack, expiry, arbitrary IDs, Worker RPC/shared state');
   } finally { if (browser) await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

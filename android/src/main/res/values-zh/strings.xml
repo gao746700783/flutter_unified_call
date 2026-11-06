@@ -20,4 +20,7 @@
     <string name="unified_call_updateErrorText">无法更新通话</string>
     <string name="unified_call_retryText">重试</string>
     <string name="unified_call_meetingNamePrefix">会议名称：</string>
+    <string name="unified_call_cancelCallText">取消呼叫</string>
+    <string name="unified_call_joiningMeetingText">正在加入会议</string>
+    <string name="unified_call_joinMeetingText">加入会议</string>
 </resources>

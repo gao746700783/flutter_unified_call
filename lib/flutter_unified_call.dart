@@ -32,6 +32,7 @@ class FlutterUnifiedCall {
   Map<String, String> resolveTexts(String locale) => {
     ..._texts.resolve(locale),
     if (_acceptText != null) 'acceptText': _acceptText!,
+    if (_acceptText != null) 'joinMeetingText': _texts.joinMeetingText ?? _acceptText!,
     if (_declineText != null) 'declineText': _declineText!,
   };
 
@@ -98,6 +99,7 @@ class FlutterUnifiedCall {
     await _platform.invoke('initialize', {
       ...texts.resolve(PlatformDispatcher.instance.locale.languageCode),
       if (acceptText != null) 'acceptText': acceptText,
+      if (acceptText != null) 'joinMeetingText': texts.joinMeetingText ?? acceptText,
       if (declineText != null) 'declineText': declineText,
       // Android CallStyle owns its button labels; custom labels use actions.
       'customCallActions': texts.languageCode != null || acceptText != null ||
@@ -129,8 +131,24 @@ class FlutterUnifiedCall {
     /// Incoming call details, including its unique ID and absolute expiry.
     IncomingCallConfig config,
   ) async {
+    if (config.direction != CallDirection.incoming) {
+      throw ArgumentError('Use startOutgoingCall for outgoing presentations');
+    }
     await _platform.invoke('showIncomingCall', config.toMap());
   }
+
+  /// Registers a local outgoing call or a meeting being created/joined.
+  ///
+  /// This never sends signaling, starts media, or rings the incoming UI.
+  /// For meetings the notification only opens the host; leaving/ending a room
+  /// remains an application operation. Invite participants without starting a
+  /// second presentation for the same meeting.
+  Future<void> startOutgoingCall(OutgoingCallConfig config) async {
+    await _platform.invoke('startOutgoingCall', config.toMap());
+  }
+
+  /// Optionally marks an outgoing peer answered before media is connected.
+  Future<void> setCallConnecting(String callId) => _command('setCallConnecting', callId);
 
   /// Updates ongoing call details in place (e.g. caller name, handle, extra).
   Future<void> updateCall({

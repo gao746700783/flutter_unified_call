@@ -81,6 +81,13 @@ class _CallDemoState extends State<CallDemo> {
     callerHandle: 'Demo caller', expiresAt: DateTime.now().add(const Duration(seconds: 30)),
     extra: {'roomId': 'demo-room'},
   )));
+  Future<void> startLocal({bool meeting = false}) => _run(() => api.startOutgoingCall(OutgoingCallConfig(
+    callId: DateTime.now().microsecondsSinceEpoch.toString(),
+    displayName: meeting ? 'Demo meeting' : 'Bob',
+    kind: meeting ? CallKind.meeting : CallKind.pointToPoint,
+    expiresAt: DateTime.now().add(const Duration(seconds: 60)),
+    extra: meeting ? {'meetingName': 'Demo meeting', 'meetingNumber': '00123456'} : const {},
+  )));
   @override
   void dispose() { unawaited(_subscription?.cancel()); super.dispose(); }
   @override
@@ -95,6 +102,8 @@ class _CallDemoState extends State<CallDemo> {
         ],
         Wrap(spacing: 12, runSpacing: 8, children: [
           ElevatedButton(onPressed: !_ready || _busy ? null : showCall, child: const Text('Simulate incoming call')),
+          OutlinedButton(onPressed: !_ready || _busy ? null : () => startLocal(), child: const Text('Simulate outgoing call')),
+          OutlinedButton(onPressed: !_ready || _busy ? null : () => startLocal(meeting: true), child: const Text('Simulate joining meeting')),
           OutlinedButton(onPressed: !_ready || _busy ? null : () => _run(() async {
             final permissions = await api.requestPermissions();
             if (mounted) setState(() => status = 'Notifications: ${permissions.notifications.name}');
@@ -116,11 +125,14 @@ class _CallDemoState extends State<CallDemo> {
                 TextButton(onPressed: _busy ? null : () => _run(() => api.acceptCall(call.config.callId)), child: const Text('Accept call')),
                 TextButton(onPressed: _busy ? null : () => _run(() => api.declineCall(call.config.callId)), child: const Text('Decline call')),
               ],
+              if (call.state == CallState.dialing) TextButton(
+                onPressed: _busy ? null : () => _run(() => api.setCallConnecting(call.config.callId)), child: const Text('Simulate peer answered')),
               if (call.state == CallState.accepted) TextButton(
                 onPressed: _busy ? null : () => _run(() => api.setCallConnected(call.config.callId)), child: const Text('Mark media connected')),
-              if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android && call.state != CallState.ringing)
+              if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android && call.config.kind == CallKind.pointToPoint && call.state != CallState.ringing)
                 TextButton(onPressed: _busy ? null : () => _selectAudio(call.config.callId), child: const Text('Audio output')),
-              TextButton(onPressed: _busy ? null : () => _run(() => api.endCall(call.config.callId)), child: const Text('End call')),
+              TextButton(onPressed: _busy ? null : () => _run(() => api.endCall(call.config.callId, reason: call.state == CallState.dialing ? CallEndReason.cancelled : CallEndReason.localEnded)),
+                child: Text(call.config.kind == CallKind.meeting ? 'Leave demo meeting' : call.state == CallState.dialing ? 'Cancel call' : 'End call')),
             ]),
           ]))),
       ]),

@@ -31,12 +31,15 @@ internal class CallStore(context: Context, private val writeOverride: ((String) 
         }
         data.put("events", remaining); save()
     }
-    fun incoming(config: JSONObject): Boolean {
+    fun incoming(config: JSONObject, outgoing: Boolean = false): Boolean {
         val id = config.getString("callId")
         require(id.isNotBlank() && config.getString("callerName").isNotBlank()) { "Empty call identity" }
         require(config.has("extra") && config.get("extra") is JSONObject) { "extra must be an object" }
         require(config.optString("mediaType") in listOf("audio", "video")) { "Invalid media type" }
         require(config.get("expiresAt") is Number) { "expiresAt must be epoch milliseconds" }
+        require(!config.has("direction") || config.optString("direction") in listOf("incoming", "outgoing")) { "Invalid direction" }
+        require(!config.has("kind") || config.optString("kind") in listOf("pointToPoint", "meeting")) { "Invalid call kind" }
+        require(config.isOutgoingCall() == outgoing) { "Wrong call entry point" }
         val expiry = config.getLong("expiresAt")
         val now = System.currentTimeMillis()
         if (expiry <= now) return false
@@ -51,11 +54,13 @@ internal class CallStore(context: Context, private val writeOverride: ((String) 
             save()
             return false
         }
-        val call = JSONObject().put("config", config).put("state", "ringing")
-        calls.put(id, call); emit(call, "incoming"); return true
+        val state = if (!outgoing) "ringing" else if (config.isMeetingCall()) "accepted" else "dialing"
+        val call = JSONObject().put("config", config).put("state", state)
+        calls.put(id, call); emit(call, if (outgoing) "started" else "incoming"); return true
     }
     fun update(id: String, callerName: String?, callerHandle: String?, extraUpdates: JSONObject?): JSONObject? {
         val call = get(id) ?: return null
+        if (call.getString("state") == "ended") return null
         val config = call.getJSONObject("config")
         if (!callerName.isNullOrBlank()) {
             config.put("callerName", callerName)
@@ -75,13 +80,15 @@ internal class CallStore(context: Context, private val writeOverride: ((String) 
         val state = call.getString("state")
         if (state == "ended") return false
         if ((action == "accepted" || action == "declined" || action == "missed") && state != "ringing") return false
+        if (action == "connecting") {
+            if (!call.getJSONObject("config").isOutgoingCall() || state != "dialing") return false
+        }
         if (action == "connected") {
             if (state == "connected") return false
-            val isOutgoing = call.getJSONObject("config").optBoolean("outgoing", false) ||
-                call.getJSONObject("config").optJSONObject("extra")?.optBoolean("outgoing") == true
-            check(state == "accepted" || (state == "ringing" && isOutgoing)) { "Accept the call before connecting" }
+            val isOutgoing = call.getJSONObject("config").isOutgoingCall()
+            check(state == "accepted" || (state == "dialing" && isOutgoing)) { "Accept the call before connecting" }
         }
-        call.put("state", if (action == "accepted" || action == "connected") action else "ended")
+        call.put("state", if (action == "connecting") "accepted" else if (action == "accepted" || action == "connected") action else "ended")
         emit(call, action, reason); return true
     }
     fun platformEvent(id: String, type: String, metadata: Map<String, Any?>) {
@@ -130,3 +137,8 @@ private fun unwrap(value: Any?): Any? = when (value) {
     is JSONArray -> value.toList()
     else -> value
 }
+
+internal fun JSONObject.isOutgoingCall(): Boolean = if (has("direction")) optString("direction") == "outgoing"
+    else optBoolean("outgoing", false) || optJSONObject("extra")?.optBoolean("outgoing") == true
+internal fun JSONObject.isMeetingCall(): Boolean = if (has("kind")) optString("kind") == "meeting"
+    else optBoolean("meeting", false) || optJSONObject("extra")?.optBoolean("meeting") == true

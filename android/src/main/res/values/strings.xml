@@ -20,4 +20,7 @@
     <string name="unified_call_updateErrorText">Unable to update call</string>
     <string name="unified_call_retryText">Retry</string>
     <string name="unified_call_meetingNamePrefix">"Meeting name: "</string>
+    <string name="unified_call_cancelCallText">Cancel call</string>
+    <string name="unified_call_joiningMeetingText">Joining meeting</string>
+    <string name="unified_call_joinMeetingText">Join meeting</string>
 </resources>

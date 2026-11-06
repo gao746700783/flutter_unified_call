@@ -48,6 +48,30 @@ production release candidate until the remaining platform checks below pass.
 - Notification/full-screen/Telecom permissions are reported independently.
 - No promise of guaranteed background launch or notification delivery on iOS/Web.
 
+## Outgoing and meeting scenes (2026-11-06)
+
+- Explicit direction/kind, local start, dialing, optional peer-answer transition,
+  setup expiry, terminal deduplication and durable replay implemented across
+  Android/iOS/Web stores. Old incoming payloads remain decodable.
+- Android point-to-point uses outgoing Telecom registration. Local meetings and
+  accepted meeting invitations have no default hangup controls; meeting room
+  lifecycle and participant invitation permissions remain with the host SDK.
+- Automated coverage includes silent outgoing notifications, phone connection
+  dialing/active transitions, cancellation, meeting actions, setup expiry,
+  persistence, Web cross-tab state and SDK scene synchronization. Native process
+  recovery fails stale local media presentations rather than ringing again.
+- Validation passed: 17 Flutter tests, 47 Android native tests, two example
+  widget tests, 21 related SDK tests, Swift store regression, Chrome core/page
+  and Worker push tests, related static analysis, iOS Simulator and consuming
+  SDK Android debug builds. SDK tests include late completion after cancellation
+  followed by a new session, stale meeting success/failure/exception callbacks,
+  native timeout/failure reason mapping and cancelInvite signaling. Android
+  regression covers notification recovery after foreground-service failure or
+  destruction.
+- Real-device outgoing Telecom/audio coexistence, notification action taps and
+  setup expiry under background restrictions remain unverified. See
+  [the outgoing guide](OUTGOING_CALLS.md) for platform behavior and boundaries.
+
 ## Text and meeting notifications (2026-11-06)
 
 - Shared `CallTexts` configuration supplies Chinese/English defaults and partial

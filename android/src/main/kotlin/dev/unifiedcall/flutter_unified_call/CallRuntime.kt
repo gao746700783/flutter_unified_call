@@ -16,6 +16,7 @@ internal class CallRuntime private constructor(val context: Context) {
     val listeners = mutableSetOf<(Map<String, Any?>) -> Unit>()
     val connections = mutableMapOf<String, Connection>()
     val audio = CallAudioBridge(this)
+    private var foregroundCallId: String? = null
     private var ringer: Ringtone? = null
     private val handler = Handler(Looper.getMainLooper())
     private var restored = false
@@ -124,7 +125,7 @@ internal class CallRuntime private constructor(val context: Context) {
             if (call.getString("state") == "ringing") {
                 if (call.getJSONObject("config").getLong("expiresAt") <= System.currentTimeMillis()) act(id, "missed", "missed")
                 else { schedule(call); show(call) }
-            } else if (call.getString("state") == "accepted" || call.getString("state") == "connected") {
+            } else if (call.getString("state") in listOf("dialing", "accepted", "connected")) {
                 // A new process cannot recover the external media engine/session.
                 act(id, "ended", "failed")
             }
@@ -133,9 +134,9 @@ internal class CallRuntime private constructor(val context: Context) {
     fun reconcileExpiry() {
         for (call in store.all()) {
             val config = call.getJSONObject("config")
-            if (call.getString("state") == "ringing" && config.getLong("expiresAt") <= System.currentTimeMillis()) {
-                act(config.getString("callId"), "missed", "missed")
-            }
+            val state = call.getString("state")
+            if ((state == "ringing" || (config.isOutgoingCall() && state in listOf("dialing", "accepted"))) &&
+                config.getLong("expiresAt") <= System.currentTimeMillis()) expire(call)
         }
     }
     fun incoming(args: Map<*, *>) {
@@ -150,7 +151,7 @@ internal class CallRuntime private constructor(val context: Context) {
         }
         val call = store.get(config.getString("callId"))!!
         schedule(call)
-        if (Build.VERSION.SDK_INT >= 26 && store.options().optBoolean("enableTelecom", true)) {
+        if (!config.isMeetingCall() && Build.VERSION.SDK_INT >= 26 && store.options().optBoolean("enableTelecom", true)) {
             try {
                 val telecom = context.getSystemService(TelecomManager::class.java)
                 telecom.registerPhoneAccount(PhoneAccount.builder(account, "App calls")
@@ -162,10 +163,42 @@ internal class CallRuntime private constructor(val context: Context) {
             }
         } else show(call)
     }
+    fun outgoing(args: Map<*, *>) {
+        val config = JSONObject(args).put("direction", "outgoing")
+        if (!store.incoming(config, outgoing = true)) return
+        val call = store.get(config.getString("callId"))!!
+        schedule(call)
+        show(call)
+        if (!config.isMeetingCall() && Build.VERSION.SDK_INT >= 26 && store.options().optBoolean("enableTelecom", true)) {
+            try {
+                val telecom = context.getSystemService(TelecomManager::class.java)
+                telecom.registerPhoneAccount(PhoneAccount.builder(account, "App calls")
+                    .setCapabilities(PhoneAccount.CAPABILITY_SELF_MANAGED).build())
+                telecom.placeCall(Uri.fromParts("tel", config.getString("callId"), null), Bundle().apply {
+                    putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, account)
+                    putBundle(TelecomManager.EXTRA_OUTGOING_CALL_EXTRAS, Bundle().apply { putString("callId", config.getString("callId")) })
+                })
+            } catch (error: RuntimeException) {
+                store.platformEvent(config.getString("callId"), "platformError",
+                    mapOf("operation" to "telecom", "error" to error.javaClass.simpleName, "fallback" to "notification"))
+            }
+        }
+    }
+    private fun expire(call: JSONObject) {
+        val config = call.getJSONObject("config")
+        val id = config.getString("callId")
+        if (call.getString("state") !in listOf("ringing", "dialing", "accepted")) return
+        if (config.isOutgoingCall()) act(id, "ended", if (config.isMeetingCall() || call.getString("state") == "accepted") "failed" else "unanswered")
+        else act(id, "missed", "missed")
+    }
+
     fun updateCall(id: String, callerName: String?, callerHandle: String?, extra: JSONObject?) {
         val call = store.update(id, callerName, callerHandle, extra) ?: return
         show(call)
         updateForegroundService()
+    }
+    fun showOutgoingUi(id: String) {
+        store.get(id)?.let { if (it.getJSONObject("config").isOutgoingCall() && it.getString("state") != "ended") show(it) }
     }
     fun showIncomingUi(id: String) { store.get(id)?.let { if (it.getString("state") == "ringing") show(it) } }
     fun act(id: String, action: String, reason: String? = null) {
@@ -175,15 +208,24 @@ internal class CallRuntime private constructor(val context: Context) {
             call.getJSONObject("config").getLong("expiresAt") <= System.currentTimeMillis()) {
             act(id, "missed", "missed"); return
         }
+        val config = call.getJSONObject("config")
+        if (action in listOf("connecting", "connected") && config.isOutgoingCall() &&
+            call.getString("state") in listOf("dialing", "accepted") &&
+            config.getLong("expiresAt") <= System.currentTimeMillis()) {
+            expire(call); return
+        }
         if (!store.transition(id, action, reason)) return
-        timeouts.remove(id)?.let(handler::removeCallbacks)
-        alarms.cancel(timeoutIntent(id))
+        if (action != "connecting") {
+            timeouts.remove(id)?.let(handler::removeCallbacks)
+            alarms.cancel(timeoutIntent(id))
+        }
         if (store.all().none { it.optString("state") == "ringing" }) {
             ringer?.stop(); ringer = null
         }
         val connection = connections[id]
         when (action) {
             "accepted" -> { connection?.setAudioModeIsVoip(true); connection?.setActive(); show(call) }
+            "connecting" -> show(call)
             "connected" -> { connection?.setAudioModeIsVoip(true); connection?.setActive(); show(call) }
             else -> {
                 notifications.cancel(id, 1)
@@ -197,9 +239,18 @@ internal class CallRuntime private constructor(val context: Context) {
         updateForegroundService()
     }
     fun ongoingTelecomIds(): List<String> = connections.keys.filter {
-        store.get(it)?.optString("state") in listOf("accepted", "connected")
+        store.get(it)?.optString("state") in listOf("dialing", "accepted", "connected")
+    }
+    fun foregroundStarted(id: String?) {
+        foregroundCallId = id
+        for (callId in ongoingTelecomIds()) store.get(callId)?.let(::show)
+    }
+    fun foregroundStopped() {
+        foregroundCallId = null
+        for (id in ongoingTelecomIds()) store.get(id)?.let(::show)
     }
     fun reportForegroundError(error: RuntimeException) {
+        foregroundStopped()
         for (id in ongoingTelecomIds()) {
             store.platformEvent(id, "platformError", mapOf("operation" to "foregroundService", "error" to error.javaClass.simpleName))
         }
@@ -220,7 +271,7 @@ internal class CallRuntime private constructor(val context: Context) {
         val config = call.getJSONObject("config")
         val id = config.getString("callId")
         timeouts.remove(id)?.let(handler::removeCallbacks)
-        val task = Runnable { act(id, "missed", "missed") }
+        val task = Runnable { store.get(id)?.let(::expire) }
         timeouts[id] = task
         handler.postDelayed(task, (config.getLong("expiresAt") - System.currentTimeMillis()).coerceAtLeast(0))
         // Inexact by design: no exact-alarm special access is requested.
@@ -273,8 +324,7 @@ internal class CallRuntime private constructor(val context: Context) {
         )
     }
 
-    private fun isMeeting(config: JSONObject?): Boolean = config?.optBoolean("meeting") == true ||
-        config?.optJSONObject("extra")?.optBoolean("meeting") == true
+    private fun isMeeting(config: JSONObject?): Boolean = config?.isMeetingCall() == true
 
     private fun notificationTitle(config: JSONObject?, state: String): String {
         val meetingName = (config?.optJSONObject("extra")?.opt("meetingName") as? String).orEmpty()
@@ -288,20 +338,26 @@ internal class CallRuntime private constructor(val context: Context) {
 
     private fun ongoingSubtitle(config: JSONObject?, state: String): String {
         if (isMeeting(config)) {
-            val status = text(if (state == "accepted") "connectingText" else "meetingText")
+            val status = text(if (state == "accepted") "joiningMeetingText" else "meetingText")
             val number = (config?.optJSONObject("extra")?.opt("meetingNumber") as? String).orEmpty()
             return if (number.isNotBlank()) "$status · $number" else status
         }
-        return config?.optString("callerHandle").orEmpty().ifBlank { text("ongoingText") }
+        if (config?.isOutgoingCall() == true) {
+            return text(when (state) { "dialing" -> "outgoingText"; "accepted" -> "connectingText"; else -> "ongoingText" })
+        }
+        return (config?.opt("callerHandle") as? String).orEmpty().ifBlank { text("ongoingText") }
     }
+    private fun endActionText(config: JSONObject, state: String): String =
+        text(if (config.isOutgoingCall() && state == "dialing") "cancelCallText" else "hangupText")
 
     fun foregroundNotification(): Notification {
-        val id = ongoingTelecomIds().firstOrNull() ?: return Notification.Builder(context)
-            .setSmallIcon(android.R.drawable.sym_call_incoming)
-            .setContentTitle(text("ongoingText"))
-            .setCategory(Notification.CATEGORY_CALL)
-            .setOngoing(true)
-            .build()
+        val id = ongoingTelecomIds().firstOrNull()
+        if (id == null) {
+            val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(context, "unified_call_ongoing") else Notification.Builder(context)
+            return builder.setSmallIcon(android.R.drawable.sym_call_incoming)
+                .setContentTitle(text("ongoingText"))
+                .setCategory(Notification.CATEGORY_CALL).setOngoing(true).build()
+        }
         val config = store.get(id)?.optJSONObject("config")
         val state = store.get(id)?.optString("state").orEmpty()
         val ongoingText = ongoingSubtitle(config, state)
@@ -325,11 +381,11 @@ internal class CallRuntime private constructor(val context: Context) {
                 launchIntent(id),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             ))
-        val hangupText = text("hangupText")
-        if (Build.VERSION.SDK_INT >= 31 && !store.options().optBoolean("customCallActions")) {
+        val hangupText = endActionText(config ?: JSONObject(), state)
+        if (!isMeeting(config) && state != "dialing" && Build.VERSION.SDK_INT >= 31 && !store.options().optBoolean("customCallActions")) {
             val person = Person.Builder().setName(callerName).build()
             builder.setStyle(Notification.CallStyle.forOngoingCall(person, end))
-        } else {
+        } else if (!isMeeting(config)) {
             builder.addAction(Notification.Action.Builder(null, hangupText, end).build())
         }
         return builder.build()
@@ -339,8 +395,8 @@ internal class CallRuntime private constructor(val context: Context) {
         val id = config.getString("callId")
         val ringing = call.getString("state") == "ringing"
         val isMeeting = isMeeting(config)
-        val isOutgoing = config.optBoolean("outgoing", false) || config.optJSONObject("extra")?.optBoolean("outgoing") == true
-        val handle = config.optString("callerHandle").orEmpty()
+        val isOutgoing = config.isOutgoingCall()
+        val handle = (config.opt("callerHandle") as? String).orEmpty()
         val defaultRinging = if (isOutgoing) text("outgoingText")
             else if (isMeeting) text("meetingInvitationText")
             else if (config.optString("mediaType") == "video") text("videoSubtitle")
@@ -359,19 +415,20 @@ internal class CallRuntime private constructor(val context: Context) {
             .setContentIntent(open).setVisibility(if (ringing && !isOutgoing) Notification.VISIBILITY_PUBLIC else Notification.VISIBILITY_PRIVATE)
         val decline = action(id, if (ringing && !isOutgoing) "declined" else "ended")
         val accept = action(id, "accepted")
-        val useCallStyle = Build.VERSION.SDK_INT >= 31 && !store.options().optBoolean("customCallActions") &&
+        val useCallStyle = !isMeeting && call.getString("state") != "dialing" &&
+            Build.VERSION.SDK_INT >= 31 && !store.options().optBoolean("customCallActions") &&
             ((ringing && !isOutgoing && (Build.VERSION.SDK_INT < 34 || notifications.canUseFullScreenIntent())) || (!ringing) || (ringing && isOutgoing))
         if (useCallStyle) {
             val person = Person.Builder().setName(callerName).build()
             builder.setStyle(if (ringing && !isOutgoing) Notification.CallStyle.forIncomingCall(person, decline, accept)
                 else Notification.CallStyle.forOngoingCall(person, decline))
         } else {
-            val declineText = if (ringing && !isOutgoing) text("declineText") else text("hangupText")
-            val acceptText = text("acceptText")
-            builder.addAction(Notification.Action.Builder(null, declineText, decline).build())
+            val declineText = if (ringing && !isOutgoing) text("declineText") else endActionText(config, call.getString("state"))
+            val acceptText = text(if (isMeeting) "joinMeetingText" else "acceptText")
+            if (ringing || !isMeeting) builder.addAction(Notification.Action.Builder(null, declineText, decline).build())
             if (ringing && !isOutgoing) builder.addAction(Notification.Action.Builder(null, acceptText, accept).build())
             @Suppress("DEPRECATION")
-            builder.setPriority(Notification.PRIORITY_MAX)
+            builder.setPriority(if (ringing && !isOutgoing) Notification.PRIORITY_MAX else Notification.PRIORITY_LOW)
         }
         if (ringing && !isOutgoing) {
             @Suppress("DEPRECATION")
@@ -387,7 +444,7 @@ internal class CallRuntime private constructor(val context: Context) {
         if (ringing && !isOutgoing) notification.flags = notification.flags or Notification.FLAG_INSISTENT
         val suppressed = (ringing && !isOutgoing && isAppForeground &&
             store.options().optBoolean("androidForegroundBanner", false)) ||
-            (!ringing && ongoingTelecomIds().size == 1)
+            (!ringing && foregroundCallId == id && ongoingTelecomIds() == listOf(id))
         val degraded = if (suppressed) {
             notifications.cancel(id, 1)
             false
@@ -397,7 +454,7 @@ internal class CallRuntime private constructor(val context: Context) {
             val acceptAction = Notification.Action.Builder(null, text("acceptText"), accept).build()
             if (ringing && !isOutgoing) builder.setActions(declineAction, acceptAction)
             else builder.setActions(declineAction)
-            builder.build().apply { flags = flags or Notification.FLAG_INSISTENT }
+            builder.build().apply { if (ringing && !isOutgoing) flags = flags or Notification.FLAG_INSISTENT }
         }) { notifications.notify(id, 1, it) }
         else { notifications.notify(id, 1, notification); false }
         if (degraded) store.platformEvent(id, "platformError", mapOf(
@@ -442,7 +499,9 @@ class CallActionReceiver : BroadcastReceiver() {
         val id = intent.getStringExtra("callId") ?: return
         val action = intent.action ?: return
         val runtime = CallRuntime.get(context)
-        runtime.act(id, action, if (action == "declined") "declined" else "localEnded")
+        val call = runtime.store.get(id)
+        val cancelling = action == "ended" && call?.getJSONObject("config")?.isOutgoingCall() == true && call.optString("state") != "connected"
+        runtime.act(id, action, if (action == "declined") "declined" else if (cancelling) "cancelled" else "localEnded")
     }
 }
 

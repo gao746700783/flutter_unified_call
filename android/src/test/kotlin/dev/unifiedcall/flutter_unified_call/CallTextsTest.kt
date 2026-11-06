@@ -60,7 +60,7 @@ class CallTextsTest {
         fun notification() = shadowOf(runtime.notifications).getNotification("meeting", 1)
         assertEquals("邀请你加入会议", notification().extras.getCharSequence(Notification.EXTRA_TEXT))
         runtime.act("meeting", "accepted")
-        assertEquals("正在接通", notification().extras.getCharSequence(Notification.EXTRA_TEXT))
+        assertEquals("正在加入会议", notification().extras.getCharSequence(Notification.EXTRA_TEXT))
         runtime.act("meeting", "connected")
         assertEquals("会议中", notification().extras.getCharSequence(Notification.EXTRA_TEXT))
         runtime.updateCall("meeting", null, "Custom invitation", JSONObject()
@@ -76,7 +76,7 @@ class CallTextsTest {
     @Test fun foregroundMeetingNotificationUsesLocalizedStateAndDetails() {
         val runtime = CallRuntime.get(context)
         runtime.configure(mapOf("enableTelecom" to false, "customCallActions" to true,
-            "connectingText" to "Joining meeting", "meetingText" to "In meeting",
+            "joiningMeetingText" to "Joining meeting", "meetingText" to "In meeting",
             "meetingNamePrefix" to "Room: "))
         runtime.incoming(mapOf("callId" to "meeting-service", "callerName" to "Inviter",
             "callerHandle" to "Invitation to join a meeting", "mediaType" to "audio",

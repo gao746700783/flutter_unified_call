@@ -74,8 +74,8 @@ prove actual process-kill alarm delivery or Doze timing.
 
 ## Telecom foreground service
 
-Accepted calls with a live Telecom Connection start a non-exported phoneCall
-foreground service. The service declares FOREGROUND_SERVICE and
+Accepted incoming point-to-point calls and locally dialed outgoing calls with
+a live Telecom Connection start a non-exported phoneCall foreground service. The service declares FOREGROUND_SERVICE and
 FOREGROUND_SERVICE_PHONE_CALL permissions; MANAGE_OWN_CALLS supplies the declared
 phone-call prerequisite. It does not capture audio or configure a media engine.
 Notification-only fallback calls do not start this Telecom-specific service.

@@ -36,12 +36,15 @@ final class CallStore {
         try commit(calls: calls, events: events.filter { $0["eventId"] as? String != id }, options: options)
     }
     @discardableResult
-    func incoming(_ config: [String: Any], now: Double = Date().timeIntervalSince1970 * 1000) throws -> Bool {
+    func incoming(_ config: [String: Any], outgoing: Bool = false, now: Double = Date().timeIntervalSince1970 * 1000) throws -> Bool {
         guard let id = config["callId"] as? String, !id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               let name = config["callerName"] as? String, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               let expiry = config["expiresAt"] as? NSNumber,
               let media = config["mediaType"] as? String, ["audio", "video"].contains(media),
               config["extra"] is [String: Any], JSONSerialization.isValidJSONObject(config) else { throw CallStoreError.invalidPayload }
+        guard config["direction"] == nil || ["incoming", "outgoing"].contains(config["direction"] as? String ?? ""),
+              config["kind"] == nil || ["pointToPoint", "meeting"].contains(config["kind"] as? String ?? ""),
+              callIsOutgoing(config) == outgoing else { throw CallStoreError.invalidPayload }
         if expiry.doubleValue <= now { return false }
         if var existing = calls[id] {
             guard let state = existing["state"] as? String, state != "ended",
@@ -56,8 +59,9 @@ final class CallStore {
             try commit(calls: updated, events: events, options: options)
             return false
         }
-        let call: [String: Any] = ["config": config, "state": "ringing"]
-        try emit(id: id, call: call, type: "incoming", now: now)
+        let state = outgoing ? (callIsMeeting(config) ? "accepted" : "dialing") : "ringing"
+        let call: [String: Any] = ["config": config, "state": state]
+        try emit(id: id, call: call, type: outgoing ? "started" : "incoming", now: now)
         return true
     }
     @discardableResult
@@ -65,18 +69,39 @@ final class CallStore {
                     now: Double = Date().timeIntervalSince1970 * 1000) throws -> Bool {
         guard var call = calls[id], let state = call["state"] as? String, state != "ended" else { return false }
         if ["accepted", "declined", "missed"].contains(action) && state != "ringing" { return false }
+        guard let config = call["config"] as? [String: Any] else { throw CallStoreError.invalidPayload }
+        if action == "connecting" && (!callIsOutgoing(config) || state != "dialing") { return false }
+        if ["connecting", "connected"].contains(action), callIsOutgoing(config), ["dialing", "accepted"].contains(state),
+           let expiry = config["expiresAt"] as? NSNumber, expiry.doubleValue <= now {
+            return try transition(id, action: "ended", reason: callIsMeeting(config) || state == "accepted" ? "failed" : "unanswered", now: now)
+        }
         if action == "connected" {
             if state == "connected" { return false }
-            guard state == "accepted" else { throw CallStoreError.invalidState }
+            guard state == "accepted" || (state == "dialing" && callIsOutgoing(config)) else { throw CallStoreError.invalidState }
         }
         if action == "accepted", let config = call["config"] as? [String: Any],
            let expiry = config["expiresAt"] as? NSNumber, expiry.doubleValue <= now {
             return try transition(id, action: "missed", reason: "missed", now: now)
         }
-        call["state"] = ["accepted", "connected"].contains(action) ? action : "ended"
+        call["state"] = action == "connecting" ? "accepted" : (["accepted", "connected"].contains(action) ? action : "ended")
         try emit(id: id, call: call, type: action, reason: reason, now: now)
         return true
     }
+    func update(_ id: String, callerName: String?, callerHandle: String?, extra: [String: Any]?) throws {
+        guard var call = calls[id], call["state"] as? String != "ended",
+              var config = call["config"] as? [String: Any] else { return }
+        if let name = callerName, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { config["callerName"] = name }
+        if let handle = callerHandle { config["callerHandle"] = handle }
+        if let extra = extra {
+            var existing = config["extra"] as? [String: Any] ?? [:]
+            existing.merge(extra) { _, latest in latest }; config["extra"] = existing
+        }
+        guard JSONSerialization.isValidJSONObject(config) else { throw CallStoreError.invalidPayload }
+        call["config"] = config
+        var updated = calls; updated[id] = call
+        try commit(calls: updated, events: events, options: options)
+    }
+
     func platformError(id: String, error: Error) throws {
         guard let call = calls[id], call["state"] as? String != "ended" else { return }
         try emit(id: id, call: call, type: "platformError", now: Date().timeIntervalSince1970 * 1000,
@@ -104,4 +129,13 @@ final class CallStore {
         try data.write(to: url, options: .atomic)
         self.calls = retainedCalls; self.events = events; self.options = options
     }
+}
+
+func callIsOutgoing(_ config: [String: Any]) -> Bool {
+    if let direction = config["direction"] as? String { return direction == "outgoing" }
+    return config["outgoing"] as? Bool == true || (config["extra"] as? [String: Any])?["outgoing"] as? Bool == true
+}
+func callIsMeeting(_ config: [String: Any]) -> Bool {
+    if let kind = config["kind"] as? String { return kind == "meeting" }
+    return config["meeting"] as? Bool == true || (config["extra"] as? [String: Any])?["meeting"] as? Bool == true
 }

@@ -87,3 +87,28 @@ replay["callId"] = "terminal-0"
 replay["expiresAt"] = now + 60000
 check(!(try CallStore(url: retainedURL).incoming(replay, now: now)), "Terminal call revived after 51 endings")
 print("PASS: extra merge, historical snapshots, lifecycle, expiry, durable replay/ack and persistence rollback")
+
+// Local presentations remain silent state records, with outgoing-specific expiry.
+let outgoingStore = try CallStore(url: directory.appendingPathComponent("outgoing.json"))
+var outgoing = config
+outgoing["callId"] = "outgoing"; outgoing["direction"] = "outgoing"; outgoing["kind"] = "pointToPoint"
+check(try outgoingStore.incoming(outgoing, outgoing: true, now: now), "Outgoing setup failed")
+check(outgoingStore.get("outgoing")?["state"] as? String == "dialing", "Outgoing must dial")
+check(try outgoingStore.transition("outgoing", action: "connecting", now: now), "Peer answer failed")
+check(try outgoingStore.transition("outgoing", action: "connected", now: now), "Outgoing connect failed")
+check(outgoingStore.events.map { $0["type"] as! String } == ["started", "connecting", "connected"], "Wrong outgoing event sequence")
+var lateOutgoing = outgoing; lateOutgoing["callId"] = "late-outgoing"
+check(try outgoingStore.incoming(lateOutgoing, outgoing: true, now: now), "Late setup failed")
+try outgoingStore.transition("late-outgoing", action: "connected", now: now + 60000)
+check(outgoingStore.events.last?["type"] as? String == "ended", "Outgoing expiry must end")
+check(outgoingStore.events.last?["reason"] as? String == "unanswered", "Outgoing expiry must not be missed")
+var meeting = outgoing; meeting["callId"] = "local-meeting"; meeting["kind"] = "meeting"
+check(try outgoingStore.incoming(meeting, outgoing: true, now: now), "Meeting setup failed")
+check(outgoingStore.get("local-meeting")?["state"] as? String == "accepted", "Meeting must join directly")
+try outgoingStore.update("local-meeting", callerName: "Weekly", callerHandle: nil, extra: ["meetingNumber": "001234"])
+let meetingReloaded = try CallStore(url: directory.appendingPathComponent("outgoing.json")).get("local-meeting")!
+check((meetingReloaded["config"] as! [String: Any])["kind"] as? String == "meeting", "Kind not persisted")
+check(((meetingReloaded["config"] as! [String: Any])["extra"] as! [String: Any])["meetingNumber"] as? String == "001234", "Number lost")
+try outgoingStore.transition("local-meeting", action: "connected", now: now + 60000)
+check(outgoingStore.events.last?["reason"] as? String == "failed", "Joining timeout must fail, not miss")
+print("PASS: outgoing lifecycle, meeting setup, typed payload persistence and expiry")

@@ -16,6 +16,9 @@ class CallTexts {
     this.connectingText,
     this.connectedText,
     this.outgoingText,
+    this.cancelCallText,
+    this.joiningMeetingText,
+    this.joinMeetingText,
     this.meetingText,
     this.meetingNamePrefix,
     this.meetingInvitationText,
@@ -62,6 +65,15 @@ class CallTexts {
 
   /// Override for Calling.
   final String? outgoingText;
+
+  /// Action label for cancelling a point-to-point outgoing call.
+  final String? cancelCallText;
+
+  /// Accept action for a meeting invitation; falls back to an accept override.
+  final String? joinMeetingText;
+
+  /// Status while creating or joining a meeting.
+  final String? joiningMeetingText;
 
   /// Override for Meeting in progress.
   final String? meetingText;
@@ -115,6 +127,9 @@ class CallTexts {
       'connectingText': connectingText ?? (chinese ? '正在接通' : 'Connecting'),
       'connectedText': connectedText ?? (chinese ? '已接通' : 'Connected'),
       'outgoingText': outgoingText ?? (chinese ? '正在呼叫' : 'Calling'),
+      'cancelCallText': cancelCallText ?? (chinese ? '取消呼叫' : 'Cancel call'),
+      'joiningMeetingText': joiningMeetingText ?? (chinese ? '正在加入会议' : 'Joining meeting'),
+      'joinMeetingText': joinMeetingText ?? acceptText ?? (chinese ? '加入会议' : 'Join meeting'),
       'meetingText': meetingText ?? (chinese ? '会议中' : 'Meeting in progress'),
       'meetingNamePrefix': meetingNamePrefix ?? (chinese ? '会议名称：' : 'Meeting name: '),
       'meetingInvitationText': meetingInvitationText ??

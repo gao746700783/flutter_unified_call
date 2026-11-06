@@ -36,6 +36,7 @@ class FlutterUnifiedCallPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
             when (call.method) {
                 "initialize" -> { runtime.configure(args); result.success(null) }
                 "showIncomingCall" -> { runtime.incoming(args); result.success(null) }
+                "startOutgoingCall" -> { runtime.outgoing(args); result.success(null) }
                 "updateCall" -> {
                     require(!id.isNullOrBlank()) { "Missing callId" }
                     val callerName = args["callerName"] as? String
@@ -50,11 +51,11 @@ class FlutterUnifiedCallPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
                     result.success(runtime.store.all().filter { it.getString("state") != "ended" }.map { it.toMap() })
                 }
                 "acknowledgeEvent" -> { runtime.store.acknowledge(args["eventId"] as String); result.success(null) }
-                "acceptCall", "declineCall", "setCallConnected", "endCall" -> {
+                "acceptCall", "declineCall", "setCallConnecting", "setCallConnected", "endCall" -> {
                     require(!id.isNullOrBlank()) { "Missing callId" }
                     val reason = args["reason"] as? String ?: "localEnded"
                     val action = when (call.method) {
-                        "acceptCall" -> "accepted"; "declineCall" -> "declined"
+                        "setCallConnecting" -> "connecting"; "acceptCall" -> "accepted"; "declineCall" -> "declined"
                         "setCallConnected" -> "connected"; else -> if (reason == "missed") "missed" else "ended"
                     }
                     runtime.act(id, action, if (action == "declined") "declined" else if (action == "ended" || action == "missed") reason else null)

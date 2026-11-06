@@ -5,6 +5,7 @@ import AVFoundation
 
 final class CallRuntime {
     static let category = "flutter_unified_call.incoming"
+    static let meetingCategory = "flutter_unified_call.meeting"
     static let payloadKey = "flutter_unified_call"
     private static var cached: CallRuntime?
     static var shared: Result<CallRuntime, Error> { Result {
@@ -42,7 +43,19 @@ final class CallRuntime {
             guard let self = self else { return }
             for listener in Array(self.listeners.values) { listener(event) }
         }
+        for call in store.allCalls {
+            if let config = call["config"] as? [String: Any], callIsOutgoing(config),
+               call["state"] as? String != "ended", let id = config["callId"] as? String {
+                try store.transition(id, action: "ended", reason: "failed")
+            }
+        }
     }
+    func startOutgoing(_ config: [String: Any]) throws {
+        var config = config; config["direction"] = "outgoing"
+        if try store.incoming(config, outgoing: true), let id = config["callId"] as? String,
+           let expiry = config["expiresAt"] as? NSNumber { schedule(id, expiry: expiry.doubleValue) }
+    }
+
     func initialize(_ options: [String: Any], completion: @escaping (Error?) -> Void) {
         do {
             if let name = options["iosRingtoneFileName"] as? String {
@@ -63,11 +76,13 @@ final class CallRuntime {
             let accept = UNNotificationAction(identifier: "accepted", title: text("acceptText"), options: [.foreground])
             let decline = UNNotificationAction(identifier: "declined", title: text("declineText"), options: [])
             let category = UNNotificationCategory(identifier: Self.category, actions: [accept, decline], intentIdentifiers: [], options: [])
+            let join = UNNotificationAction(identifier: "accepted", title: text("joinMeetingText"), options: [.foreground])
+            let meetingCategory = UNNotificationCategory(identifier: Self.meetingCategory, actions: [join, decline], intentIdentifiers: [], options: [])
             center.getNotificationCategories { [weak self] existing in
                 DispatchQueue.main.async {
                     guard let self = self else { return }
-                    var categories = existing.filter { $0.identifier != Self.category }
-                    categories.insert(category)
+                    var categories = existing.filter { ![Self.category, Self.meetingCategory].contains($0.identifier) }
+                    categories.insert(category); categories.insert(meetingCategory)
                     self.center.setNotificationCategories(categories)
                     do { try self.reconcile(); completion(nil) } catch { completion(error) }
                 }
@@ -76,9 +91,10 @@ final class CallRuntime {
     }
     func reconcile() throws {
         for call in store.allCalls {
-            guard call["state"] as? String == "ringing", let config = call["config"] as? [String: Any],
+            guard let config = call["config"] as? [String: Any], let state = call["state"] as? String,
+                  state == "ringing" || (callIsOutgoing(config) && ["dialing", "accepted"].contains(state)),
                   let id = config["callId"] as? String, let expiry = config["expiresAt"] as? NSNumber else { continue }
-            if expiry.doubleValue <= Date().timeIntervalSince1970 * 1000 { try act(id, action: "missed", reason: "missed") }
+            if expiry.doubleValue <= Date().timeIntervalSince1970 * 1000 { try expire(id) }
             else { schedule(id, expiry: expiry.doubleValue) }
         }
         try syncRinger()
@@ -107,9 +123,12 @@ final class CallRuntime {
     }
     private func text(_ key: String) -> String {
         if let value = store.options[key] as? String { return value }
+        if key == "joinMeetingText", let value = store.options["acceptText"] as? String { return value }
         let chinese = Locale.preferredLanguages.first?.hasPrefix("zh") == true
         switch key {
         case "acceptText": return chinese ? "接听" : "Accept"
+        case "joinMeetingText": return chinese ? "加入会议" : "Join meeting"
+        case "meetingInvitationText": return chinese ? "邀请你加入会议" : "Invitation to join a meeting"
         case "declineText": return chinese ? "拒绝" : "Decline"
         case "audioSubtitle": return chinese ? "语音来电" : "Incoming audio call"
         case "videoSubtitle": return chinese ? "视频来电" : "Incoming video call"
@@ -150,8 +169,8 @@ final class CallRuntime {
         let content = UNMutableNotificationContent()
         content.title = config["callerName"] as? String ?? text("incomingTitle")
         let handle = config["callerHandle"] as? String ?? ""
-        content.body = handle.isEmpty ? text(config["mediaType"] as? String == "video" ? "videoSubtitle" : "audioSubtitle") : handle
-        content.categoryIdentifier = Self.category
+        content.body = handle.isEmpty ? text(callIsMeeting(config) ? "meetingInvitationText" : config["mediaType"] as? String == "video" ? "videoSubtitle" : "audioSubtitle") : handle
+        content.categoryIdentifier = callIsMeeting(config) ? Self.meetingCategory : Self.category
         let payload = try JSONSerialization.data(withJSONObject: config)
         guard let payloadString = String(data: payload, encoding: .utf8) else { throw CallStoreError.invalidPayload }
         content.userInfo = [Self.payloadKey: payloadString]
@@ -164,7 +183,9 @@ final class CallRuntime {
     }
     func act(_ id: String, action: String, reason: String? = nil) throws {
         guard try store.transition(id, action: action, reason: reason) else { return }
-        timers.removeValue(forKey: id)?.invalidate()
+        if action != "connecting" || store.get(id)?["state"] as? String == "ended" {
+            timers.removeValue(forKey: id)?.invalidate()
+        }
         center.removePendingNotificationRequests(withIdentifiers: ["unified-call-\(id)"])
         center.removeDeliveredNotifications(withIdentifiers: ["unified-call-\(id)"])
         try syncRinger()
@@ -196,11 +217,18 @@ final class CallRuntime {
         }
         return true
     }
+    private func expire(_ id: String) throws {
+        guard let call = store.get(id), let config = call["config"] as? [String: Any],
+              let state = call["state"] as? String else { return }
+        if callIsOutgoing(config), ["dialing", "accepted"].contains(state) {
+            try act(id, action: "ended", reason: callIsMeeting(config) || state == "accepted" ? "failed" : "unanswered")
+        } else if state == "ringing" { try act(id, action: "missed", reason: "missed") }
+    }
     private func schedule(_ id: String, expiry: Double) {
         timers.removeValue(forKey: id)?.invalidate()
         let delay = max(0, expiry / 1000 - Date().timeIntervalSince1970)
         timers[id] = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
-            do { try self?.act(id, action: "missed", reason: "missed") }
+            do { try self?.expire(id) }
             catch { NSLog("flutter_unified_call: timeout persistence failed: %@", String(describing: error)) }
         }
     }

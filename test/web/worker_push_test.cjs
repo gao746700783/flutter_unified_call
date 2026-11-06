@@ -66,12 +66,12 @@ const assert = require('node:assert/strict');
           event.data.ok ? resolve() : reject(new Error(event.data.error));
         };
         registration.active.postMessage({type: 'unified-call', method: 'initialize', args: {
-          audioSubtitle: '语音邀请', acceptText: '加入', declineText: '忽略',
+          audioSubtitle: '语音邀请', meetingInvitationText: '会议邀请', acceptText: '加入', declineText: '忽略',
         }}, [channel.port2]);
       });
     });
     await cdp.send('ServiceWorker.stopAllWorkers');
-    await push({flutter_unified_call: {...config, callId: 'custom-text', expiresAt: Date.now() + 30000}});
+    await push({flutter_unified_call: {...config, kind: 'meeting', callId: 'custom-text', expiresAt: Date.now() + 30000}});
     const custom = await page.evaluate(async () => {
       const registration = await navigator.serviceWorker.getRegistration('/calls/');
       const deadline = Date.now() + 10000;
@@ -82,7 +82,7 @@ const assert = require('node:assert/strict');
       }
       throw new Error('Custom notification did not appear');
     });
-    assert.deepEqual(custom, {body: '语音邀请', labels: ['加入', '忽略']});
+    assert.deepEqual(custom, {body: '会议邀请', labels: ['加入', '忽略']});
     console.log('PASS: browser-delivered Push, background system notification/actions, Worker restart/cancel and durable inbox');
   } finally { if (browser) await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

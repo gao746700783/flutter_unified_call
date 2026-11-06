@@ -9,12 +9,20 @@ enum CallMediaType {
   video,
 }
 
+/// Direction of the local call presentation.
+enum CallDirection { incoming, outgoing }
+
+/// Business scene; a meeting never exposes point-to-point hangup controls.
+enum CallKind { pointToPoint, meeting }
+
 /// Lifecycle state maintained by the plugin for a call.
 enum CallState {
+  /// A locally initiated point-to-point call is awaiting the peer.
+  dialing,
   /// The call is awaiting an answer and has not expired.
   ringing,
 
-  /// The user accepted; the host media engine may now connect.
+  /// Incoming accepted, peer answered, or a locally initiated meeting is joining.
   accepted,
 
   /// The host reported that its media connection succeeded.
@@ -26,6 +34,11 @@ enum CallState {
 
 /// Types of events emitted by call state transitions and platform integrations.
 enum CallEventType {
+  /// A local outgoing call or meeting presentation was recorded.
+  started,
+
+  /// The peer answered an outgoing call; media is still connecting.
+  connecting,
   /// A new incoming call was recorded.
   incoming,
 
@@ -59,6 +72,8 @@ enum CallEventType {
 
 /// Reasons a call can enter the ended state.
 enum CallEndReason {
+  /// An outgoing point-to-point call expired before connection.
+  unanswered,
   /// The local user or host ended the call.
   localEnded,
 
@@ -89,9 +104,12 @@ class IncomingCallConfig {
     required this.callerName,
     this.callerHandle,
     this.mediaType = CallMediaType.audio,
+    this.direction = CallDirection.incoming,
+    CallKind? kind,
     required DateTime expiresAt,
     Map<String, Object?> extra = const {},
-  }) : expiresAt = expiresAt.toUtc(),
+  }) : kind = kind ?? (extra['meeting'] == true ? CallKind.meeting : CallKind.pointToPoint),
+       expiresAt = expiresAt.toUtc(),
        extra = _freezeMap(extra) {
     if (callId.trim().isEmpty || callerName.trim().isEmpty) {
       throw ArgumentError('callId and callerName must not be empty');
@@ -106,6 +124,10 @@ class IncomingCallConfig {
   final String? callerHandle;
   /// Descriptive media type; it does not start a media engine.
   final CallMediaType mediaType;
+  /// Explicit direction persisted with every event and snapshot.
+  final CallDirection direction;
+  /// Meeting versus point-to-point behavior; old extra.meeting is supported.
+  final CallKind kind;
   /// Absolute expiry prevents a delayed push from starting a fresh timeout.
   final DateTime expiresAt;
   /// Immutable JSON-safe application data associated with this call.
@@ -115,7 +137,7 @@ class IncomingCallConfig {
   Map<String, Object?> toMap() => {
     'callId': callId, 'callerName': callerName, 'callerHandle': callerHandle,
     'mediaType': mediaType.name, 'expiresAt': expiresAt.millisecondsSinceEpoch,
-    'extra': extra,
+    'extra': extra, 'direction': direction.name, 'kind': kind.name,
   };
 
   /// Creates a configuration from the plugin's platform-neutral wire format.
@@ -124,9 +146,34 @@ class IncomingCallConfig {
     callerName: map['callerName'] as String,
     callerHandle: map['callerHandle'] as String?,
     mediaType: CallMediaType.values.byName(map['mediaType'] as String),
+    direction: map['direction'] == null
+        ? (map['outgoing'] == true || (map['extra'] as Map?)?['outgoing'] == true ? CallDirection.outgoing : CallDirection.incoming)
+        : CallDirection.values.byName(map['direction'] as String),
+    kind: map['kind'] == null ? (map['meeting'] == true ? CallKind.meeting : null) : CallKind.values.byName(map['kind'] as String),
     expiresAt: DateTime.fromMillisecondsSinceEpoch(map['expiresAt'] as int, isUtc: true),
     extra: map['extra'] == null ? const {} : Map<String, Object?>.from(map['extra'] as Map),
   );
+}
+
+/// A locally initiated point-to-point call or meeting presentation.
+///
+/// [expiresAt] is the setup deadline. It stops applying once connected.
+/// A meeting uses joining UI and has no notification hangup action.
+class OutgoingCallConfig extends IncomingCallConfig {
+  OutgoingCallConfig({
+    required super.callId,
+    required String displayName,
+    String? handle,
+    super.mediaType = CallMediaType.audio,
+    CallKind kind = CallKind.pointToPoint,
+    required super.expiresAt,
+    super.extra = const {},
+  }) : super(
+         callerName: displayName,
+         callerHandle: handle,
+         direction: CallDirection.outgoing,
+         kind: kind,
+       );
 }
 
 Map<String, Object?> _freezeMap(Map<String, Object?> value) {

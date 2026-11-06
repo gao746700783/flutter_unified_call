@@ -12,6 +12,10 @@ object UnifiedCall {
         dispatch { CallRuntime.get(context).incoming(config) }
 
     @JvmStatic
+    fun startOutgoingCall(context: Context, config: Map<String, Any?>): CompletableFuture<Void> =
+        dispatch { CallRuntime.get(context).outgoing(config) }
+
+    @JvmStatic
     fun cancelCall(context: Context, callId: String): CompletableFuture<Void> = dispatch {
         require(callId.isNotBlank()) { "Missing callId" }
         CallRuntime.get(context).act(callId, "ended", "cancelled")
