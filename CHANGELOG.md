@@ -1,4 +1,4 @@
-## Unreleased
+## 0.2.0 - 2026-11-06
 
 - Flutter/Android/iOS/Web: 统一 `CallTexts` 配置，为通知、Android 锁屏页和 banner 提供中英文默认文案及自定义覆盖，兼容原有按钮文本参数。
 - Flutter: banner 继承同一 controller 的初始化文案，支持配置更新及错误、重试文案本地化；初始化失败时保留原配置。
